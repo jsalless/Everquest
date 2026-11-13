@@ -4,7 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import CharacterCreationScreen from './src/screens/CharacterCreationScreen';
 import FocusScreen from './src/screens/FocusScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import { loadSavedAvatar } from './src/components/CharacterAvatar';
 import { FAVICON_SVG } from './src/components/svgAssets';
 import { ToastContainer } from './src/utils/toast';
 
@@ -13,6 +16,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('focus');
   const [isFocusing, setIsFocusing] = useState(false);
   const [session, setSession] = useState(null);
+  const [avatarConfig, setAvatarConfig] = useState(() => loadSavedAvatar());
+  const [isEditingAvatar, setIsEditingAvatar] = useState(false);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -31,13 +36,20 @@ export default function App() {
 
   const isLightBg =
     currentScreen === 'register' ||
-    (currentScreen === 'focus' && !isFocusing);
+    (currentScreen === 'focus' && activeTab !== 'profile' && !isFocusing);
 
   return (
     <>
       <StatusBar
         style={isLightBg ? 'dark' : 'light'}
-        backgroundColor={isLightBg ? '#FFFFFF' : '#725CFF'}
+        backgroundColor={
+          currentScreen === 'character_creation' ||
+          (currentScreen === 'focus' && activeTab === 'profile')
+            ? '#000C56'
+            : isLightBg
+            ? '#FFFFFF'
+            : '#725CFF'
+        }
       />
 
       {currentScreen === 'register' && (
@@ -54,19 +66,48 @@ export default function App() {
         <OnboardingScreen
           user={session?.user || session}
           onComplete={() => {
-            setActiveTab('focus');
+            setIsEditingAvatar(false);
+            setCurrentScreen('character_creation');
+          }}
+        />
+      )}
+
+      {currentScreen === 'character_creation' && (
+        <CharacterCreationScreen
+          initialConfig={avatarConfig}
+          isEditing={isEditingAvatar}
+          onCancel={() => {
+            setActiveTab('profile');
+            setCurrentScreen('focus');
+          }}
+          onComplete={(savedConfig) => {
+            setAvatarConfig(savedConfig);
+            setActiveTab(isEditingAvatar ? 'profile' : 'focus');
+            setIsEditingAvatar(false);
             setCurrentScreen('focus');
           }}
         />
       )}
 
-      {currentScreen === 'focus' && (
-        <FocusScreen
-          activeTab={activeTab}
-          onChangeTab={(tabId) => setActiveTab(tabId)}
-          onFocusStateChange={(focusing) => setIsFocusing(focusing)}
-        />
-      )}
+      {currentScreen === 'focus' &&
+        (activeTab === 'profile' ? (
+          <ProfileScreen
+            user={session?.user || session}
+            avatarConfig={avatarConfig}
+            activeTab={activeTab}
+            onChangeTab={(tabId) => setActiveTab(tabId)}
+            onEditCharacter={() => {
+              setIsEditingAvatar(true);
+              setCurrentScreen('character_creation');
+            }}
+          />
+        ) : (
+          <FocusScreen
+            activeTab={activeTab}
+            onChangeTab={(tabId) => setActiveTab(tabId)}
+            onFocusStateChange={(focusing) => setIsFocusing(focusing)}
+          />
+        ))}
 
       {currentScreen === 'login' && (
         <LoginScreen
