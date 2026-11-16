@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
@@ -17,9 +18,6 @@ import CharacterAvatar from '../components/CharacterAvatar';
 import ProfileQrCode, { buildProfileLink, parseProfileLink } from '../components/ProfileQrCode';
 import { EverquestLogo2 } from '../components/QrCodeGenerator';
 import {
-  BADGE1_SVG,
-  BADGE2_SVG,
-  BADGE3_SVG,
   CHEST_WOOD_SVG,
   CHEST_IRON_SVG,
   CHEST_GOLD_SVG,
@@ -211,9 +209,12 @@ export default function ProfileScreen({
   activeTab = 'profile',
   onChangeTab,
   onEditCharacter,
+  onOpenSettings,
   friendInvite,
   onConsumeFriendInvite,
 }) {
+  const { colors } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const { width: windowWidth } = useWindowDimensions();
   const containerWidth = Math.min(windowWidth, 430);
 
@@ -243,6 +244,16 @@ export default function ProfileScreen({
   const [dailyQuests, setDailyQuests] = useState(() => loadDailyQuests(user));
   const [badgesList, setBadgesList] = useState(() => loadCachedUserBadges(user));
   const [claimingTier, setClaimingTier] = useState(null);
+  const [previousFriendInvite, setPreviousFriendInvite] = useState(friendInvite);
+
+  if (friendInvite !== previousFriendInvite) {
+    setPreviousFriendInvite(friendInvite);
+    if (friendInvite) {
+      setIsScanning(false);
+      setIsAddFriendModalVisible(false);
+      setFriendNotice('');
+    }
+  }
 
   // Nome do personagem criado pelo usuário (ex.: "Johnn")
   const characterName =
@@ -271,39 +282,44 @@ export default function ProfileScreen({
   useEffect(() => {
     const loadedRewards = loadUserRewards(user);
     const loadedLevel = getLevelProgressFromXp(loadedRewards.xp);
-    setUserRewards(loadedRewards);
-    setDailyQuests(loadDailyQuests(user));
-
     let isMounted = true;
     async function initProfileProgressionAndFriends() {
-      setIsLoadingFriends(true);
-      await syncUserProfileToBackend({
-        user,
-        avatarConfig,
-        level: loadedLevel.level,
-        xp: loadedRewards.xp,
-        coins: loadedRewards.coins,
-      });
+      try {
+        await syncUserProfileToBackend({
+          user,
+          avatarConfig,
+          level: loadedLevel.level,
+          xp: loadedRewards.xp,
+          coins: loadedRewards.coins,
+        });
+        if (!isMounted) return;
 
-      const [progressionRes, friendsRes, badgesRes] = await Promise.all([
-        fetchUserProgressionAndQuests(user),
-        fetchUserFriends(user, ''),
-        fetchUserBadges(user),
-      ]);
+        const [progressionRes, friendsRes, badgesRes] = await Promise.all([
+          fetchUserProgressionAndQuests(user),
+          fetchUserFriends(user, ''),
+          fetchUserBadges(user),
+        ]);
 
-      if (isMounted) {
-        if (progressionRes?.rewards) {
-          setUserRewards(progressionRes.rewards);
+        if (isMounted) {
+          if (progressionRes?.rewards) {
+            setUserRewards(progressionRes.rewards);
+          }
+          if (Array.isArray(progressionRes?.dailyQuests)) {
+            setDailyQuests(progressionRes.dailyQuests);
+          }
+          if (Array.isArray(badgesRes?.badges) && badgesRes.badges.length > 0) {
+            setBadgesList(badgesRes.badges);
+          }
+          setFriendsList(friendsRes.friends);
+          setFriendsTotalCount(friendsRes.total);
         }
-        if (Array.isArray(progressionRes?.dailyQuests)) {
-          setDailyQuests(progressionRes.dailyQuests);
+      } catch (error) {
+        if (isMounted) {
+          console.error('Não foi possível atualizar o perfil:', error);
+          toast.error('Não foi possível atualizar o perfil. Tente novamente.');
         }
-        if (Array.isArray(badgesRes?.badges) && badgesRes.badges.length > 0) {
-          setBadgesList(badgesRes.badges);
-        }
-        setFriendsList(friendsRes.friends);
-        setFriendsTotalCount(friendsRes.total);
-        setIsLoadingFriends(false);
+      } finally {
+        if (isMounted) setIsLoadingFriends(false);
       }
     }
     initProfileProgressionAndFriends();
@@ -338,9 +354,9 @@ export default function ProfileScreen({
   useEffect(() => {
     if (!isAddFriendModalVisible) return;
     let active = true;
-    setRequestsError('');
     fetchFriendRequests(user).then((result) => {
       if (active) {
+        setRequestsError('');
         setPendingRequests(result.incoming);
         setOutgoingIds(result.outgoingIds);
       }
@@ -353,14 +369,6 @@ export default function ProfileScreen({
     });
     return () => { active = false; };
   }, [isAddFriendModalVisible, user, requestsRevision]);
-
-  useEffect(() => {
-    if (friendInvite) {
-      setIsScanning(false);
-      setIsAddFriendModalVisible(false);
-      setFriendNotice('');
-    }
-  }, [friendInvite]);
 
   async function handleAddFriend({ friendId, friendUsername }) {
     if (isSubmittingFriend) return;
@@ -419,7 +427,7 @@ export default function ProfileScreen({
       }
       scanHandled.current = false;
       setIsScanning(true);
-    } catch (error) {
+    } catch {
       setFriendNotice('Não foi possível acessar a câmera.');
       toast.error('Não foi possível acessar a câmera.');
     }
@@ -433,8 +441,11 @@ export default function ProfileScreen({
       toast.info(`${friend.characterName} foi removido da sua lista de amigos.`);
       fetchUserBadges(user, { friendsCount: res.total }).then((bRes) => {
         if (Array.isArray(bRes?.badges)) setBadgesList(bRes.badges);
+      }).catch((error) => {
+        console.error('Não foi possível atualizar as insígnias:', error);
+        toast.error('Amigo removido, mas não foi possível atualizar as insígnias.');
       });
-    } catch (err) {
+    } catch {
       toast.error('Não foi possível remover o amigo.');
     }
   }
@@ -496,9 +507,9 @@ export default function ProfileScreen({
               <TouchableOpacity
                 style={styles.gearButton}
                 activeOpacity={0.8}
-                onPress={onEditCharacter}
+                onPress={onOpenSettings}
                 accessibilityRole="button"
-                accessibilityLabel="Personalizar personagem"
+                accessibilityLabel="Abrir configurações"
               >
                 <GearIcon size={28} color="#FFFFFF" />
               </TouchableOpacity>
@@ -582,6 +593,7 @@ export default function ProfileScreen({
                 activeOpacity={0.85}
                 onPress={() => {
                   setAddFriendQuery('');
+                  setRequestsError('');
                   setIsAddFriendModalVisible(true);
                 }}
                 accessibilityRole="button"
@@ -882,7 +894,7 @@ export default function ProfileScreen({
                 accessibilityRole="button"
                 accessibilityLabel="Fechar visualização da conquista"
               >
-                <CloseIcon size={24} color="#1A1A1A" />
+                <CloseIcon size={24} color={colors.isDark ? colors.text : '#1A1A1A'} />
               </TouchableOpacity>
             </View>
 
@@ -961,6 +973,7 @@ export default function ProfileScreen({
                 onPress={() => {
                   setIsFriendsModalVisible(false);
                   setAddFriendQuery('');
+                  setRequestsError('');
                   setIsAddFriendModalVisible(true);
                 }}
                 accessibilityRole="button"
@@ -1080,7 +1093,7 @@ export default function ProfileScreen({
         <View style={styles.qrOverlay}>
           <View style={styles.qrCard}>
             <TouchableOpacity style={styles.qrClose} onPress={() => setIsQrVisible(false)} accessibilityRole="button" accessibilityLabel="Fechar QR Code">
-              <CloseIcon />
+              <CloseIcon color={colors.isDark ? colors.text : '#1A1A1A'} />
             </TouchableOpacity>
             <View style={styles.qrAvatar}>
               <CharacterAvatar config={avatarConfig} width={240} height={240} cropToWaist />
@@ -1102,7 +1115,7 @@ export default function ProfileScreen({
                   <TouchableOpacity style={styles.qrShare} onPress={async () => {
                     try {
                       await Share.share({ message: `Adicione-me no Everquest: ${profileLink}` });
-                    } catch (error) {
+                    } catch {
                       toast.error('Não foi possível compartilhar o convite.');
                     }
                   }} accessibilityRole="button">
@@ -1335,7 +1348,7 @@ export default function ProfileScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   qrOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',
@@ -1346,7 +1359,7 @@ const styles = StyleSheet.create({
   qrCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 16,
   },
@@ -1360,27 +1373,27 @@ const styles = StyleSheet.create({
   },
   qrCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   qrIdentity: { flex: 1 },
-  qrName: { fontSize: 24, fontWeight: '800', color: '#222123' },
-  qrHandle: { fontSize: 14, color: '#7A8090', marginVertical: 5 },
-  qrLink: { fontSize: 11, color: '#7A8090', marginTop: 8 },
+  qrName: { fontSize: 24, fontWeight: '800', color: colors.isDark ? colors.text : '#222123' },
+  qrHandle: { fontSize: 14, color: colors.isDark ? colors.secondary : '#7A8090', marginVertical: 5 },
+  qrLink: { fontSize: 11, color: colors.isDark ? colors.secondary : '#7A8090', marginTop: 8 },
   qrShare: { backgroundColor: '#7153FD', padding: 12, borderRadius: 10, alignItems: 'center', marginVertical: 12 },
-  inviteCard: { width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24 },
-  pendingEmpty: { color: '#7A8090', marginBottom: 20 },
-  pendingRefresh: { color: '#7153FD', marginBottom: 12, fontWeight: '700' },
-  friendNotice: { color: '#2B2E3B', marginBottom: 8 },
+  inviteCard: { width: '100%', maxWidth: 380, backgroundColor: colors.surface, borderRadius: 20, padding: 24 },
+  pendingEmpty: { color: colors.isDark ? colors.secondary : '#7A8090', marginBottom: 20 },
+  pendingRefresh: { color: colors.accent, marginBottom: 12, fontWeight: '700' },
+  friendNotice: { color: colors.isDark ? colors.text : '#2B2E3B', marginBottom: 8 },
   scanButton: { backgroundColor: '#7153FD', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 },
   scannerContainer: { flex: 1, padding: 20 },
-  scannerText: { color: '#222123', marginBottom: 12, textAlign: 'center' },
+  scannerText: { color: colors.isDark ? colors.text : '#222123', marginBottom: 12, textAlign: 'center' },
   scannerCamera: { flex: 1, borderRadius: 16, overflow: 'hidden' },
   root: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     alignItems: 'center',
   },
   mobileFrame: {
     flex: 1,
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   scrollArea: {
     flex: 1,
@@ -1429,15 +1442,15 @@ const styles = StyleSheet.create({
   },
   whiteBodySection: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     paddingHorizontal: 22,
     paddingTop: 14,
   },
   levelProgressContainer: {
     width: '100%',
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5DEFF',
+    borderColor: colors.isDark ? colors.border : '#E5DEFF',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -1469,7 +1482,7 @@ const styles = StyleSheet.create({
   levelTotalXpHint: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#6E688F',
+    color: colors.isDark ? colors.secondary : '#6E688F',
   },
   levelXpCounterRow: {
     flexDirection: 'row',
@@ -1485,7 +1498,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 10,
     borderRadius: 999,
-    backgroundColor: '#E2DCFA',
+    backgroundColor: colors.isDark ? colors.elevated : '#E2DCFA',
     overflow: 'hidden',
   },
   levelBarFill: {
@@ -1503,15 +1516,15 @@ const styles = StyleSheet.create({
   handleText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#7A7A7A',
+    color: colors.isDark ? colors.secondary : '#7A7A7A',
   },
   friendsCountButton: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 5,
-    backgroundColor: '#F4F2FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F4F2FF',
     borderWidth: 1,
-    borderColor: '#E1DAFF',
+    borderColor: colors.isDark ? colors.border : '#E1DAFF',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 5,
@@ -1520,12 +1533,12 @@ const styles = StyleSheet.create({
   friendsCountNumber: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
   },
   friendsCountLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#7153FD',
+    color: colors.accent,
   },
   friendsSearchBarWrapper: {
     width: '100%',
@@ -1537,9 +1550,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 46,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#E3E5EE',
+    borderColor: colors.isDark ? colors.border : '#E3E5EE',
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1549,7 +1562,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1E26',
+    color: colors.isDark ? colors.text : '#1C1E26',
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
   },
   friendsSearchClearBtn: {
@@ -1565,10 +1578,10 @@ const styles = StyleSheet.create({
   },
   friendsListCardGroup: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     borderWidth: 1.5,
-    borderColor: '#E6E8F0',
+    borderColor: colors.isDark ? colors.border : '#E6E8F0',
     overflow: 'hidden',
   },
   friendListItemRow: {
@@ -1599,17 +1612,17 @@ const styles = StyleSheet.create({
   friendCharacterName: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#1B1D26',
+    color: colors.isDark ? colors.text : '#1B1D26',
   },
   friendUsernameText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7A8090',
+    color: colors.isDark ? colors.secondary : '#7A8090',
   },
   friendLevelBadge: {
-    backgroundColor: '#F3F0FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F3F0FF',
     borderWidth: 1,
-    borderColor: '#DDD4FF',
+    borderColor: colors.isDark ? colors.border : '#DDD4FF',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -1617,27 +1630,27 @@ const styles = StyleSheet.create({
   friendLevelBadgeText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#7153FD',
+    color: colors.accent,
   },
   friendsEmptyBox: {
     width: '100%',
     paddingVertical: 38,
     paddingHorizontal: 20,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E6E8F0',
+    borderColor: colors.isDark ? colors.border : '#E6E8F0',
     alignItems: 'center',
   },
   friendsEmptyTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#2B2E3B',
+    color: colors.isDark ? colors.text : '#2B2E3B',
     marginBottom: 4,
   },
   friendsEmptySub: {
     fontSize: 13,
-    color: '#7A8090',
+    color: colors.isDark ? colors.secondary : '#7A8090',
     textAlign: 'center',
   },
   friendsHeaderAddShortcut: {
@@ -1658,7 +1671,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#F4F5F9',
+    backgroundColor: colors.isDark ? colors.elevated : '#F4F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
@@ -1678,7 +1691,7 @@ const styles = StyleSheet.create({
   directorySectionLabel: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#7A8090',
+    color: colors.isDark ? colors.secondary : '#7A8090',
     letterSpacing: 0.5,
     marginBottom: 10,
     paddingHorizontal: 4,
@@ -1752,7 +1765,7 @@ const styles = StyleSheet.create({
   achievementsTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#1E1E1E',
+    color: colors.isDark ? colors.text : '#1E1E1E',
     letterSpacing: 0.3,
   },
   viewAllActionRow: {
@@ -1763,7 +1776,7 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#7153FD',
+    color: colors.accent,
   },
   badgesRow: {
     flexDirection: 'row',
@@ -1777,9 +1790,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: '#FAF9FE',
+    backgroundColor: colors.isDark ? colors.elevated : '#FAF9FE',
     borderWidth: 1,
-    borderColor: '#E8E4F7',
+    borderColor: colors.isDark ? colors.border : '#E8E4F7',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -1787,7 +1800,7 @@ const styles = StyleSheet.create({
   emptyAchievementsText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#7C8292',
+    color: colors.isDark ? colors.secondary : '#7C8292',
     textAlign: 'center',
   },
   profileBadgeItem: {
@@ -1810,15 +1823,15 @@ const styles = StyleSheet.create({
   dailyQuestsTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#1E1E1E',
+    color: colors.isDark ? colors.text : '#1E1E1E',
     letterSpacing: 0.3,
   },
   dailyQuestsGroupBox: {
     width: '100%',
-    backgroundColor: '#FAF9FE',
+    backgroundColor: colors.isDark ? colors.elevated : '#FAF9FE',
     borderRadius: 18,
     borderWidth: 1.5,
-    borderColor: '#E5E1F8',
+    borderColor: colors.isDark ? colors.border : '#E5E1F8',
     overflow: 'hidden',
   },
   dailyQuestRowItem: {
@@ -1835,7 +1848,7 @@ const styles = StyleSheet.create({
   },
   dailyQuestCardClaimed: {
     opacity: 0.72,
-    backgroundColor: '#F3F4F7',
+    backgroundColor: colors.isDark ? colors.elevated : '#F3F4F7',
   },
   questChestBox: {
     width: 52,
@@ -1877,7 +1890,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#EFEAFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#EFEAFF',
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
@@ -1890,11 +1903,11 @@ const styles = StyleSheet.create({
   questTitleText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1C1E26',
+    color: colors.isDark ? colors.text : '#1C1E26',
     lineHeight: 19,
   },
   questTitleTextClaimed: {
-    color: '#737987',
+    color: colors.isDark ? colors.secondary : '#737987',
     textDecorationLine: 'line-through',
   },
   questBottomActionRow: {
@@ -1914,7 +1927,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 7,
     borderRadius: 999,
-    backgroundColor: '#E5E7EE',
+    backgroundColor: colors.isDark ? colors.elevated : '#E5E7EE',
     overflow: 'hidden',
   },
   questProgressFill: {
@@ -1924,7 +1937,7 @@ const styles = StyleSheet.create({
   questProgressCounter: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#686F7E',
+    color: colors.isDark ? colors.secondary : '#686F7E',
   },
   questClaimButton: {
     paddingHorizontal: 12,
@@ -1935,16 +1948,16 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
   },
   questClaimButtonPending: {
-    backgroundColor: '#EDEBF7',
+    backgroundColor: colors.isDark ? colors.elevated : '#EDEBF7',
     borderWidth: 1,
-    borderColor: '#DDD6F5',
+    borderColor: colors.isDark ? colors.border : '#DDD6F5',
     ...(Platform.OS === 'web' ? { cursor: 'default' } : {}),
   },
   questClaimButtonReady: {
     backgroundColor: '#7153FD',
   },
   questClaimButtonDone: {
-    backgroundColor: '#E2E5EC',
+    backgroundColor: colors.isDark ? colors.elevated : '#E2E5EC',
     ...(Platform.OS === 'web' ? { cursor: 'default' } : {}),
   },
   questClaimButtonText: {
@@ -1953,10 +1966,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   questClaimButtonTextPending: {
-    color: '#6E688F',
+    color: colors.isDark ? colors.secondary : '#6E688F',
   },
   questClaimButtonTextDone: {
-    color: '#6A7180',
+    color: colors.isDark ? colors.secondary : '#6A7180',
   },
   navbarWrapper: {
     width: '100%',
@@ -1965,12 +1978,12 @@ const styles = StyleSheet.create({
   /* Modal: Todas as Insígnias */
   modalScreenRoot: {
     flex: 1,
-    backgroundColor: '#FAF8F6',
+    backgroundColor: colors.isDark ? colors.elevated : '#FAF8F6',
     alignItems: 'center',
   },
   modalMobileFrame: {
     flex: 1,
-    backgroundColor: '#FAF8F6',
+    backgroundColor: colors.isDark ? colors.elevated : '#FAF8F6',
   },
   insigniasTopHeader: {
     width: '100%',
@@ -2034,18 +2047,18 @@ const styles = StyleSheet.create({
   insigniaGridLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1E1E1E',
+    color: colors.isDark ? colors.text : '#1E1E1E',
     textAlign: 'center',
     lineHeight: 17,
   },
   insigniaGridLabelLocked: {
-    color: '#8D93A2',
+    color: colors.isDark ? colors.secondary : '#8D93A2',
   },
 
   /* Modal: Visualização Expandida da Badge */
   expandedBadgeFrame: {
     flex: 1,
-    backgroundColor: '#FAF8F6',
+    backgroundColor: colors.isDark ? colors.elevated : '#FAF8F6',
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 36,
@@ -2096,13 +2109,13 @@ const styles = StyleSheet.create({
   expandedDescriptionText: {
     fontSize: 18,
     fontWeight: '500',
-    color: '#1A1A1A',
+    color: colors.isDark ? colors.text : '#1A1A1A',
     textAlign: 'center',
     lineHeight: 26,
     maxWidth: 320,
   },
   expandedBadgeTitleBold: {
     fontWeight: '900',
-    color: '#1A1A1A',
+    color: colors.isDark ? colors.text : '#1A1A1A',
   },
 });

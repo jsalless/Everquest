@@ -4,13 +4,22 @@
     "slug": "Everquest",
     "scheme": "everquest",
     "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#725CFF",
+          "enableRemoteNotifications": false
+        }
+      ],
       [
         "expo-camera",
         {
           "cameraPermission": "Permita o acesso à câmera para ler convites de amizade.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "version": "1.0.0",
     "orientation": "portrait",

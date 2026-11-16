@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState } from 'react';
 import {
   StyleSheet,
@@ -146,6 +147,8 @@ export default function CharacterCreationScreen({
   isEditing = false,
   onCancel,
 }) {
+  const { colors } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [avatarConfig, setAvatarConfig] = useState(() => {
     const saved = initialConfig || loadSavedAvatar() || DEFAULT_AVATAR_CONFIG;
     return {
@@ -542,7 +545,7 @@ export default function CharacterCreationScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#000836',
@@ -763,7 +766,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   nameModalCard: {
-    backgroundColor: '#EAE4FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#EAE4FF',
     borderRadius: 28,
     paddingVertical: 24,
     paddingHorizontal: 22,
@@ -789,14 +792,14 @@ const styles = StyleSheet.create({
   nameModalTitle: {
     fontSize: 19,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 6,
   },
   nameModalSubtitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4E4679',
+    color: colors.isDark ? colors.secondary : '#4E4679',
     textAlign: 'center',
     marginBottom: 18,
     lineHeight: 18,
@@ -805,13 +808,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 52,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: '#7153FD',
     paddingHorizontal: 16,
     fontSize: 16,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 20,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
@@ -833,7 +836,7 @@ const styles = StyleSheet.create({
   nameModalBackBtnText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   nameModalConfirmBtn: {
     flex: 1.4,

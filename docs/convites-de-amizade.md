@@ -18,6 +18,20 @@ O leitor usa `expo-camera`. O esquema `everquest://` e as permissões nativas
 exigem uma nova build de desenvolvimento ou produção após alterar a
 configuração. O leitor dentro do aplicativo também funciona com Expo Go.
 
+A navegação usa Expo Router, com rotas em `src/app/`. A rota `add-friend`
+preserva o convite quando é necessário fazer login antes de adicionar o amigo.
+A engrenagem do perfil abre as configurações; a edição do avatar continua
+disponível tocando no próprio personagem.
+
+Nas configurações, alterações de usuário, e-mail e senha usam a API Prisma e
+exigem a senha atual. O e-mail de acesso é atualizado sem confirmação por
+e-mail, que ainda não foi implementada. Preferências de tema, som, vibração
+e alertas de foco ficam salvas no aparelho. Os alertas são locais: não
+exigem serviço de push, são cancelados ao pausar/interromper o temporizador
+e precisam de permissão do sistema. Em navegadores, a aba precisa ficar
+aberta; no Android, a economia de bateria pode atrasar a entrega.
+Uma nova build é necessária para incluir os módulos nativos adicionados.
+
 **Segurança:** a API atual identifica usuários por ID, sem validar uma sessão
 autenticada nas rotas de amizade. Antes de disponibilizar esse fluxo em
 produção, implemente autenticação e autorização no servidor.

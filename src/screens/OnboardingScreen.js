@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState } from 'react';
 import {
   StyleSheet,
@@ -21,6 +22,8 @@ const NEXT_ARROW_SVG = `<svg width="26" height="24" viewBox="0 0 26 24" fill="no
 </svg>`;
 
 export default function OnboardingScreen({ user, onComplete }) {
+  const { colors } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [step, setStep] = useState(0);
   const { width: windowWidth } = useWindowDimensions();
   const containerWidth = Math.min(windowWidth, 430);
@@ -145,7 +148,7 @@ export default function OnboardingScreen({ user, onComplete }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   purpleRoot: {
     flex: 1,
     backgroundColor: '#725CFF',

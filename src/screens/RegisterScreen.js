@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState } from 'react';
 import {
   StyleSheet,
@@ -24,6 +25,8 @@ import { registerUser } from '../services/authService';
 import { toast } from '../utils/toast';
 
 export default function RegisterScreen({ onRegisterSuccess, onNavigateToLogin }) {
+  const { colors } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -236,10 +239,10 @@ export default function RegisterScreen({ onRegisterSuccess, onNavigateToLogin })
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   keyboardView: {
     flex: 1,
@@ -291,7 +294,7 @@ const styles = StyleSheet.create({
     fontSize: 27,
     lineHeight: 33,
     fontWeight: '900',
-    color: '#000000',
+    color: colors.isDark ? colors.text : '#000000',
     textAlign: 'left',
     letterSpacing: 0.2,
   },
@@ -299,7 +302,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13.5,
     fontWeight: '400',
-    color: '#000000',
+    color: colors.isDark ? colors.text : '#000000',
     textAlign: 'center',
   },
   formContainer: {
@@ -311,7 +314,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#BDBDBD',
@@ -361,7 +364,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
   },
   registerButtonText: {
-    color: '#000000',
+    color: colors.isDark ? colors.text : '#000000',
     fontSize: 15,
     fontWeight: '700',
   },

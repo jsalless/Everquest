@@ -74,12 +74,15 @@ export function getSession() {
 }
 
 export function clearSession() {
-  memorySession = null;
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('everquest_session');
     }
-  } catch (_) { }
+  } catch (error) {
+    console.error('Falha ao encerrar a sessão salva:', error);
+    throw new Error('Não foi possível remover a sessão deste aparelho. Tente novamente.');
+  }
+  memorySession = null;
 }
 
 function translateError(msg = '') {
@@ -98,6 +101,48 @@ function translateError(msg = '') {
     return 'Limite de tentativas excedido. Tente novamente em instantes.';
   }
   return msg;
+}
+
+async function updateAccountEndpoint(path, payload) {
+  const session = getSession();
+  if (!session?.access_token) {
+    throw new Error('Entre novamente para alterar sua conta.');
+  }
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error('Não foi possível conectar ao servidor. Nenhuma alteração foi salva.');
+  }
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || 'Não foi possível salvar as alterações.');
+  }
+  if (!data.user?.id || data.user.id !== session.user?.id) {
+    throw new Error('O servidor retornou uma conta inválida. Entre novamente.');
+  }
+  const updated = { ...session, user: { ...session.user, ...data.user } };
+  saveSession(updated);
+  return updated;
+}
+
+export function updateAccount({ username, email, currentPassword }) {
+  return updateAccountEndpoint('/auth/account', {
+    username, email, current_password: currentPassword,
+  });
+}
+
+export function updatePassword({ currentPassword, newPassword }) {
+  return updateAccountEndpoint('/auth/password', {
+    current_password: currentPassword, new_password: newPassword,
+  });
 }
 
 function isNetworkOrParseError(err) {

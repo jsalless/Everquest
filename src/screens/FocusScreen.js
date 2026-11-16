@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
@@ -18,6 +19,7 @@ import Svg, { Rect, Path, Line, Circle } from 'react-native-svg';
 import Navbar from '../components/Navbar';
 import { toast } from '../utils/toast';
 import { syncDailyActivityProgress } from '../services/dailyQuestService';
+import useFocusClock from '../hooks/useFocusClock';
 
 const goblinFocoImage = require('../../assets/GoblinFoco.png');
 
@@ -535,6 +537,8 @@ export default function FocusScreen({
   onChangeTab,
   onFocusStateChange,
 }) {
+  const { colors, preferences } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [isFocusing, setIsFocusing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -767,25 +771,15 @@ export default function FocusScreen({
     });
   };
 
-  useEffect(() => {
-    if (!isFocusing || isPaused) return undefined;
-
-    const interval = setInterval(() => {
-      setSeconds((prev) => {
-        if (isTimerMode) {
-          if (prev <= 1) {
-            clearInterval(interval);
-            setTimeout(finishTimerAutomatically, 0);
-            return 0;
-          }
-          return prev - 1;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isFocusing, isPaused, isTimerMode, selectedMinutes]);
+  useFocusClock({
+    running: isFocusing,
+    paused: isPaused,
+    isTimer: isTimerMode,
+    seconds,
+    setSeconds,
+    onFinish: finishTimerAutomatically,
+    preferences,
+  });
 
   const formatTimer = (totalSeconds) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -887,7 +881,7 @@ export default function FocusScreen({
 
   const timerColor = expandAnim.interpolate({
     inputRange: [0, 0.45, 1],
-    outputRange: ['#000000', '#FFFFFF', '#FFFFFF'],
+    outputRange: [colors.isDark ? colors.text : '#000000', '#FFFFFF', '#FFFFFF'],
   });
 
   const timerScale = expandAnim.interpolate({
@@ -955,7 +949,7 @@ export default function FocusScreen({
             accessibilityRole="button"
             accessibilityLabel="Ver estatísticas de foco por dia"
           >
-            <StatsBarChartIcon size={20} color="#000C56" />
+            <StatsBarChartIcon size={20} color={colors.text} />
           </TouchableOpacity>
         </Animated.View>
 
@@ -1039,6 +1033,8 @@ export default function FocusScreen({
                 style={styles.startFocusButton}
                 activeOpacity={0.85}
                 onPress={handleStartFocus}
+                accessibilityRole="button"
+                accessibilityLabel="Iniciar foco"
               >
                 <Text style={styles.startFocusButtonText}>Iniciar foco</Text>
               </TouchableOpacity>
@@ -1170,7 +1166,7 @@ export default function FocusScreen({
                   accessibilityRole="button"
                   accessibilityLabel="Voltar para Cronômetro"
                 >
-                  <HourglassBadgeIcon size={20} color="#000C56" />
+                  <HourglassBadgeIcon size={20} color={colors.text} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1185,7 +1181,7 @@ export default function FocusScreen({
 
             <View style={styles.centerDisplayArea}>
               {!isTimerMode ? (
-                <StopwatchIcon size={44} color="#000C56" strokeWidth={2.3} />
+                <StopwatchIcon size={44} color={colors.text} strokeWidth={2.3} />
               ) : (
                 <Text style={styles.minutesValueText}>
                   {selectedMinutes} min
@@ -1227,6 +1223,8 @@ export default function FocusScreen({
                     key={idx}
                     activeOpacity={0.8}
                     onPress={() => setStepIndex(idx)}
+                    accessibilityRole="button"
+                    accessibilityLabel={idx === 0 ? 'Usar cronômetro' : `Definir temporizador de ${idx * 5} minutos`}
                     style={[
                       styles.tickTouchSlot,
                       { left: tickX - TICK_SPACING / 2 },
@@ -1278,6 +1276,8 @@ export default function FocusScreen({
               style={styles.modalStartButton}
               activeOpacity={0.88}
               onPress={handleStartFromModal}
+              accessibilityRole="button"
+              accessibilityLabel="Iniciar foco com a duração selecionada"
             >
               <Text style={styles.modalStartButtonText}>Iniciar foco</Text>
             </TouchableOpacity>
@@ -1601,10 +1601,10 @@ export default function FocusScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     overflow: 'hidden',
   },
@@ -1626,7 +1626,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#F3EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F3EEFF',
     borderWidth: 1.5,
     borderColor: 'rgba(113, 83, 253, 0.25)',
     alignItems: 'center',
@@ -1728,7 +1728,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 12, 86, 0.45)',
   },
   modalSheet: {
-    backgroundColor: '#EAE4FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#EAE4FF',
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
     paddingTop: 26,
@@ -1760,7 +1760,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     letterSpacing: 0.2,
   },
   hourglassResetBtn: {
@@ -1784,7 +1784,7 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 15,
     lineHeight: 21,
-    color: '#4E4679',
+    color: colors.isDark ? colors.secondary : '#4E4679',
     fontWeight: '500',
   },
   centerDisplayArea: {
@@ -1796,7 +1796,7 @@ const styles = StyleSheet.create({
   minutesValueText: {
     fontSize: 40,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
     letterSpacing: 0.4,
   },
   rulerContainer: {
@@ -1833,7 +1833,7 @@ const styles = StyleSheet.create({
   tickLineActive: {
     width: 3.2,
     height: 22,
-    backgroundColor: '#000C56',
+    backgroundColor: colors.text,
   },
   tickLineIdle: {
     width: 2,
@@ -1859,13 +1859,13 @@ const styles = StyleSheet.create({
   focoTotalTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     marginBottom: 6,
   },
   focoTotalDesc: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#4E4679',
+    color: colors.isDark ? colors.secondary : '#4E4679',
     fontWeight: '500',
   },
   switchTrack: {
@@ -1878,7 +1878,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
   },
   switchTrackOff: {
-    backgroundColor: '#F3EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F3EEFF',
     borderColor: '#7B72A6',
     alignItems: 'flex-start',
   },
@@ -1921,7 +1921,7 @@ const styles = StyleSheet.create({
 
   /* Estilos do Modal de Estatísticas (Dia, Semana, Mês e Ano) */
   statsSheet: {
-    backgroundColor: '#EAE4FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#EAE4FF',
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
     paddingTop: 22,
@@ -1941,11 +1941,11 @@ const styles = StyleSheet.create({
   statsModalTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
   },
   statsModalSubtitle: {
     fontSize: 13,
-    color: '#4E4679',
+    color: colors.isDark ? colors.secondary : '#4E4679',
     fontWeight: '600',
     marginTop: 2,
   },
@@ -1961,7 +1961,7 @@ const styles = StyleSheet.create({
   statsCloseButtonText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   periodTabsContainer: {
     width: '100%',
@@ -1981,7 +1981,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
   },
   periodTabButtonActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     shadowColor: '#000C56',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.16,
@@ -1994,7 +1994,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.85)',
   },
   periodTabTextActive: {
-    color: '#000C56',
+    color: colors.text,
     fontWeight: '900',
   },
   dateNavRow: {
@@ -2022,18 +2022,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 24,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     marginTop: -2,
   },
   dateNavLabelText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#000C56',
+    color: colors.text,
     textAlign: 'center',
   },
   chartCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     paddingVertical: 16,
     paddingHorizontal: 16,
@@ -2054,7 +2054,7 @@ const styles = StyleSheet.create({
   chartDistributionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   chartDivider: {
     width: '100%',
@@ -2065,16 +2065,16 @@ const styles = StyleSheet.create({
   totalFocusSubtitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#5B5385',
+    color: colors.isDark ? colors.secondary : '#5B5385',
     marginBottom: 16,
   },
   totalFocusHighlightMins: {
-    color: '#7153FD',
+    color: colors.accent,
     fontWeight: '800',
   },
   selectedBucketInlineInfo: {
     fontSize: 12,
-    color: '#000C56',
+    color: colors.text,
     fontWeight: '700',
   },
   chartPlotWrapper: {
@@ -2092,7 +2092,7 @@ const styles = StyleSheet.create({
   yAxisLabelText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#8E85B5',
+    color: colors.isDark ? colors.secondary : '#8E85B5',
     lineHeight: 14,
   },
   plotRightColumn: {
@@ -2181,10 +2181,10 @@ const styles = StyleSheet.create({
   xAxisLabelText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#8E85B5',
+    color: colors.isDark ? colors.secondary : '#8E85B5',
   },
   xAxisLabelTextActive: {
-    color: '#000C56',
+    color: colors.text,
     fontWeight: '800',
   },
   sessionsListHeader: {
@@ -2197,12 +2197,12 @@ const styles = StyleSheet.create({
   sessionsListTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   sessionsCountBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#7153FD',
+    color: colors.accent,
   },
   sessionsScroll: {
     width: '100%',
@@ -2214,7 +2214,7 @@ const styles = StyleSheet.create({
   },
   sessionItemRow: {
     width: '100%',
-    backgroundColor: '#F6F3FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F6F3FF',
     borderRadius: 16,
     paddingVertical: 11,
     paddingHorizontal: 14,
@@ -2235,17 +2235,17 @@ const styles = StyleSheet.create({
   sessionModeTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   sessionTimeSub: {
     fontSize: 12,
-    color: '#6E6696',
+    color: colors.isDark ? colors.secondary : '#6E6696',
     fontWeight: '600',
   },
   sessionDurationBadge: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#7153FD',
+    color: colors.accent,
   },
   emptySessionsBox: {
     width: '100%',
@@ -2257,7 +2257,7 @@ const styles = StyleSheet.create({
   },
   emptySessionsText: {
     fontSize: 13,
-    color: '#6E6696',
+    color: colors.isDark ? colors.secondary : '#6E6696',
     fontWeight: '600',
     textAlign: 'center',
   },

@@ -804,6 +804,82 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === 'PATCH' && (path === '/auth/account' || path === '/auth/password')) {
+      const token = String(req.headers.authorization || '').match(/^Bearer eq_token_(.+)$/);
+      if (!token) {
+        return sendJson(res, 401, { detail: 'Entre novamente pela sua conta do servidor.' });
+      }
+      const payload = await readJsonBody(req);
+      const found = await prisma.profile.findUnique({ where: { id: token[1] } });
+      const storedHash = found?.avatar_config?._authHash;
+      const candidateHash = hashPassword(payload.current_password);
+      if (
+        !found ||
+        typeof storedHash !== 'string' ||
+        storedHash.length !== candidateHash.length ||
+        !crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(candidateHash))
+      ) {
+        return sendJson(res, 401, { detail: 'A senha atual está incorreta.' });
+      }
+
+      let updates;
+      if (path === '/auth/password') {
+        const newPassword = payload.new_password;
+        if (typeof newPassword !== 'string' || newPassword.length < 6) {
+          return sendJson(res, 400, { detail: 'A nova senha deve ter pelo menos 6 caracteres.' });
+        }
+        if (newPassword === payload.current_password) {
+          return sendJson(res, 400, { detail: 'Escolha uma senha diferente da atual.' });
+        }
+        updates = { avatar_config: { ...found.avatar_config, _authHash: hashPassword(newPassword) } };
+      } else {
+        const username = String(payload.username || '').trim().replace(/^@/, '').toLowerCase();
+        const email = String(payload.email || '').trim().toLowerCase();
+        if (!/^[\p{L}\p{N}_.-]{3,30}$/u.test(username)) {
+          return sendJson(res, 400, { detail: 'Use de 3 a 30 letras, números, pontos, traços ou sublinhados no usuário.' });
+        }
+        if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return sendJson(res, 400, { detail: 'Informe um e-mail válido.' });
+        }
+        const duplicate = await prisma.profile.findFirst({
+          where: {
+            id: { not: found.id },
+            OR: [
+              { email: { equals: email, mode: 'insensitive' } },
+              { username: { equals: username, mode: 'insensitive' } },
+            ],
+          },
+        });
+        if (duplicate) {
+          return sendJson(res, 409, { detail: 'Este e-mail ou usuário já está em uso.' });
+        }
+        updates = { username, email };
+      }
+
+      let saved;
+      try {
+        saved = await prisma.profile.update({ where: { id: found.id }, data: updates });
+      } catch (error) {
+        if (error.code === 'P2002') {
+          return sendJson(res, 409, { detail: 'Este e-mail ou usuário já está em uso.' });
+        }
+        throw error;
+      }
+      const profile = serializeProfile(saved);
+      return sendJson(res, 200, {
+        user: {
+          id: profile.id,
+          email: profile.email,
+          username: profile.rawUsername,
+          avatarConfig: { ...profile.avatarConfig, characterName: profile.characterName },
+          user_metadata: {
+            username: profile.rawUsername,
+            display_name: profile.characterName,
+          },
+        },
+      });
+    }
+
     if (req.method === 'GET' && path === '/auth/me') {
       const authHeader = String(req.headers.authorization || '');
       if (!authHeader.startsWith('Bearer ')) {

@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState } from 'react';
 import {
   StyleSheet,
@@ -23,6 +24,8 @@ export default function LoginScreen({
   onGoogleSignIn,
   onRegister,
 }) {
+  const { colors } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -216,7 +219,7 @@ export default function LoginScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#6E59FF',
@@ -271,7 +274,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 15,
     height: 46,
     paddingHorizontal: 14,

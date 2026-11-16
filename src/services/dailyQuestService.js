@@ -1,3 +1,5 @@
+import { loadSavedTasks } from './taskService';
+
 const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 ).replace(/\/$/, '');
@@ -77,7 +79,6 @@ async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats)
 const REWARDS_STORAGE_KEY = 'everquest_user_rewards_v1';
 const DAILY_QUESTS_STORAGE_KEY = 'everquest_daily_quests_v1';
 const FOCUS_DAILY_STATS_KEY = 'everquest_focus_daily_stats_v1';
-const TASKS_STORAGE_KEY = 'everquest_tasks_v1';
 
 export const XP_PER_LEVEL = 100;
 
@@ -319,31 +320,17 @@ export function getTodayActivityStats(todayKey = getTodayKey()) {
           focusSecondsToday = Math.max(0, Number(dayEntry.totalSeconds) || 0);
         }
       }
-
-      const rawTasks = localStorage.getItem(TASKS_STORAGE_KEY);
-      if (rawTasks) {
-        const tasks = JSON.parse(rawTasks);
-        if (Array.isArray(tasks)) {
-          tasks.forEach((t) => {
-            const isMock = String(t?.id || '').startsWith('task-mock-');
-            if (
-              t?.completed &&
-              t?.completedAtDate === todayKey &&
-              (!isMock || Boolean(t?.completedByUser))
-            ) {
-              tasksCompletedToday += 1;
-            }
-            if (
-              t?.createdAtDate === todayKey &&
-              (!isMock || Boolean(t?.createdByUser))
-            ) {
-              tasksCreatedToday += 1;
-            }
-          });
-        }
-      }
     }
   } catch (_) {}
+
+  loadSavedTasks().forEach((task) => {
+    if (task?.completed && task?.completedAtDate === todayKey) {
+      tasksCompletedToday += 1;
+    }
+    if (task?.createdAtDate === todayKey) {
+      tasksCreatedToday += 1;
+    }
+  });
 
   return {
     focusSessionsToday,

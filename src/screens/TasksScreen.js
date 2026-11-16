@@ -1,3 +1,4 @@
+import { usePreferences } from '../contexts/PreferencesContext';
 import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
@@ -15,8 +16,7 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import Navbar from '../components/Navbar';
 import { toast } from '../utils/toast';
 import { syncDailyActivityProgress } from '../services/dailyQuestService';
-
-const TASKS_STORAGE_KEY = 'everquest_tasks_v1';
+import { loadSavedTasks, saveTasksList } from '../services/taskService';
 
 const WEEKDAY_HEADERS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MONTH_NAMES = [
@@ -193,91 +193,6 @@ export function isTaskVisibleOnDate(task, viewedDateKey) {
   return true;
 }
 
-function buildInitialMockTasks() {
-  const todayKey = toDateKey(new Date());
-  return [
-    {
-      id: 'task-mock-1',
-      title: 'Revisar vocabulário da missão diária',
-      description: 'Praticar 15 termos novos antes do duelo da guilda.',
-      priority: 'high',
-      manualPriority: null,
-      createdAtDate: todayKey,
-      deadlineDate: todayKey, // Hoje (0 dias -> Prioridade Alta)
-      completed: false,
-      completedAtDate: null,
-    },
-    {
-      id: 'task-mock-2',
-      title: 'Entregar relatório da expedição semanal',
-      description: 'Organizar anotações de estudo e resumo do capítulo 4.',
-      priority: 'medium',
-      manualPriority: null,
-      createdAtDate: todayKey,
-      deadlineDate: addDaysToKey(todayKey, 5), // 5 dias (6-4 dias -> Prioridade Média)
-      completed: false,
-      completedAtDate: null,
-    },
-    {
-      id: 'task-mock-3',
-      title: 'Preparar apresentação do projeto final',
-      description: 'Estruturar slides e roteiro com antecedência.',
-      priority: 'low',
-      manualPriority: null,
-      createdAtDate: todayKey,
-      deadlineDate: addDaysToKey(todayKey, 9), // 9 dias (10+-7 dias -> Prioridade Baixa)
-      completed: false,
-      completedAtDate: null,
-    },
-    {
-      id: 'task-mock-4',
-      title: 'Organizar metas da semana no grimório',
-      description: 'Definir horários de foco e descanso.',
-      priority: 'high',
-      manualPriority: null,
-      createdAtDate: todayKey,
-      deadlineDate: todayKey,
-      completed: true,
-      completedAtDate: todayKey,
-    },
-  ];
-}
-
-let memoryTasks = null;
-
-function loadSavedTasks() {
-  if (memoryTasks) return memoryTasks;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(TASKS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          memoryTasks = parsed;
-          return parsed;
-        }
-      }
-    }
-  } catch (_) { }
-  const initial = buildInitialMockTasks();
-  memoryTasks = initial;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(initial));
-    }
-  } catch (_) { }
-  return initial;
-}
-
-function saveTasksList(nextTasks) {
-  memoryTasks = nextTasks;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(nextTasks));
-    }
-  } catch (_) { }
-}
-
 function PlusIcon({ size = 18, color = '#FFFFFF' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -368,6 +283,8 @@ export default function TasksScreen({
   activeTab = 'tasks',
   onChangeTab,
 }) {
+  const { colors } = usePreferences();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const { width: windowWidth } = useWindowDimensions();
   const containerWidth = Math.min(windowWidth, 430);
 
@@ -1229,7 +1146,7 @@ export default function TasksScreen({
                 >
                   <CalendarSmallIcon
                     size={13}
-                    color={showModalCalendar ? '#7153FD' : '#000C56'}
+                    color={showModalCalendar ? colors.accent : colors.text}
                   />
                   <Text
                     style={[
@@ -1386,16 +1303,16 @@ export default function TasksScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
     alignItems: 'center',
   },
   mobileFrame: {
     flex: 1,
     justifyContent: 'space-between',
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
   },
   topHeader: {
     width: '100%',
@@ -1447,7 +1364,7 @@ const styles = StyleSheet.create({
   },
   calendarCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -1468,7 +1385,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F2EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F2EEFF',
     alignItems: 'center',
     justifyContent: 'center',
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
@@ -1477,7 +1394,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 24,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     marginTop: -2,
   },
   monthTitleWrap: {
@@ -1488,7 +1405,7 @@ const styles = StyleSheet.create({
   monthTitleText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
   },
   todayChipBtn: {
     paddingHorizontal: 10,
@@ -1499,7 +1416,7 @@ const styles = StyleSheet.create({
   todayChipText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#7153FD',
+    color: colors.accent,
   },
   weekdayHeaderRow: {
     flexDirection: 'row',
@@ -1514,7 +1431,7 @@ const styles = StyleSheet.create({
   weekdayLabelText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#8E85B5',
+    color: colors.isDark ? colors.secondary : '#8E85B5',
   },
   daysGrid: {
     flexDirection: 'row',
@@ -1546,7 +1463,7 @@ const styles = StyleSheet.create({
   dayCircleToday: {
     borderWidth: 1.8,
     borderColor: '#7153FD',
-    backgroundColor: '#F4F0FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F4F0FF',
   },
   dayCircleSelected: {
     backgroundColor: '#000C56',
@@ -1554,10 +1471,10 @@ const styles = StyleSheet.create({
   dayNumberText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1C1B33',
+    color: colors.isDark ? colors.text : '#1C1B33',
   },
   dayNumberToday: {
-    color: '#7153FD',
+    color: colors.accent,
     fontWeight: '900',
   },
   dayNumberSelected: {
@@ -1573,7 +1490,7 @@ const styles = StyleSheet.create({
   },
   pendingOverviewCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -1595,10 +1512,10 @@ const styles = StyleSheet.create({
   pendingOverviewTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   pendingTotalPill: {
-    backgroundColor: '#F2EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F2EEFF',
     paddingHorizontal: 9,
     paddingVertical: 3.5,
     borderRadius: 10,
@@ -1606,7 +1523,7 @@ const styles = StyleSheet.create({
   pendingTotalPillText: {
     fontSize: 11.5,
     fontWeight: '800',
-    color: '#7153FD',
+    color: colors.accent,
   },
   pendingOverviewBoxesRow: {
     flexDirection: 'row',
@@ -1652,12 +1569,12 @@ const styles = StyleSheet.create({
   daySectionTitle: {
     fontSize: 16.5,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
   },
   daySectionMeta: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6E6696',
+    color: colors.isDark ? colors.secondary : '#6E6696',
     marginTop: 2,
   },
   tasksListContainer: {
@@ -1666,7 +1583,7 @@ const styles = StyleSheet.create({
   },
   taskCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     flexDirection: 'row',
     overflow: 'hidden',
@@ -1679,8 +1596,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   taskCardCompleted: {
-    backgroundColor: '#ECEDF2',
-    borderColor: '#D5D8E2',
+    backgroundColor: colors.isDark ? colors.elevated : '#ECEDF2',
+    borderColor: colors.isDark ? colors.border : '#D5D8E2',
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -1703,7 +1620,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
   },
   checkboxCompleted: {
@@ -1723,11 +1640,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     lineHeight: 20,
   },
   taskTitleTextCompleted: {
-    color: '#7D8395',
+    color: colors.isDark ? colors.secondary : '#7D8395',
     textDecorationLine: 'line-through',
   },
   deleteTaskBtn: {
@@ -1735,13 +1652,13 @@ const styles = StyleSheet.create({
   },
   taskDescText: {
     fontSize: 13,
-    color: '#5B5385',
+    color: colors.isDark ? colors.secondary : '#5B5385',
     fontWeight: '500',
     marginTop: 4,
     lineHeight: 18,
   },
   taskDescTextCompleted: {
-    color: '#9399AA',
+    color: colors.isDark ? colors.secondary : '#9399AA',
     textDecorationLine: 'line-through',
   },
   taskBadgesRow: {
@@ -1776,25 +1693,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: '#F3F0FF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F3F0FF',
     borderWidth: 1,
     borderColor: 'rgba(113, 83, 253, 0.18)',
   },
   deadlineBadgeText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#4E4679',
+    color: colors.isDark ? colors.secondary : '#4E4679',
   },
   deadlineBadgeTextCompleted: {
-    color: '#7A8091',
+    color: colors.isDark ? colors.secondary : '#7A8091',
   },
   badgeCompletedGray: {
-    backgroundColor: '#DFE2EA',
-    borderColor: '#C9CEDB',
+    backgroundColor: colors.isDark ? colors.elevated : '#DFE2EA',
+    borderColor: colors.isDark ? colors.border : '#C9CEDB',
   },
   emptyStateBox: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 20,
     paddingVertical: 28,
     paddingHorizontal: 20,
@@ -1805,11 +1722,11 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 15.5,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   emptyStateSubtitle: {
     fontSize: 13,
-    color: '#6E6696',
+    color: colors.isDark ? colors.secondary : '#6E6696',
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 14,
@@ -1821,12 +1738,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 14,
-    backgroundColor: '#F2EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F2EEFF',
   },
   emptyAddBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#7153FD',
+    color: colors.accent,
   },
   navbarWrapper: {
     width: '100%',
@@ -1843,7 +1760,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 12, 86, 0.48)',
   },
   modalSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingTop: 20,
@@ -1860,20 +1777,20 @@ const styles = StyleSheet.create({
   modalHeaderTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#000C56',
+    color: colors.text,
   },
   modalCloseBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F2EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F2EEFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalCloseBtnText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   modalFormScroll: {
     width: '100%',
@@ -1884,14 +1801,14 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13.5,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
     marginBottom: 6,
     marginTop: 10,
   },
   inputLabelNoMargin: {
     fontSize: 13.5,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   labelRowWithHint: {
     flexDirection: 'row',
@@ -1903,24 +1820,24 @@ const styles = StyleSheet.create({
   deadlineSelectedHint: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#7153FD',
+    color: colors.accent,
   },
   autoPriorityNotice: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#5B5385',
+    color: colors.isDark ? colors.secondary : '#5B5385',
   },
   textInput: {
     width: '100%',
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
-    borderColor: '#E2DCFF',
+    borderColor: colors.isDark ? colors.border : '#E2DCFF',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 11,
     fontSize: 14,
     fontWeight: '600',
-    color: '#000C56',
+    color: colors.text,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
   },
   textAreaInput: {
@@ -1939,7 +1856,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: '#F2EEFF',
+    backgroundColor: colors.isDark ? colors.elevated : '#F2EEFF',
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
@@ -1949,23 +1866,23 @@ const styles = StyleSheet.create({
   },
   deadlineQuickBtnOutline: {
     borderColor: '#7153FD',
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
   },
   deadlineQuickBtnText: {
     fontSize: 12.5,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   deadlineQuickBtnTextActive: {
     color: '#FFFFFF',
   },
   modalMiniCalendar: {
     marginTop: 10,
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#E2DCFF',
+    borderColor: colors.isDark ? colors.border : '#E2DCFF',
   },
   modalCalHeader: {
     flexDirection: 'row',
@@ -1977,19 +1894,19 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalCalArrowText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   modalCalTitle: {
     fontSize: 13.5,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   prioritySelectorRow: {
     flexDirection: 'row',
@@ -1997,13 +1914,13 @@ const styles = StyleSheet.create({
   },
   priorityOptionBtn: {
     flex: 1,
-    backgroundColor: '#F7F5FF',
+    backgroundColor: colors.background,
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 8,
     alignItems: 'center',
     borderWidth: 1.8,
-    borderColor: '#E2DCFF',
+    borderColor: colors.isDark ? colors.border : '#E2DCFF',
   },
   priorityOptionDot: {
     width: 8,
@@ -2014,12 +1931,12 @@ const styles = StyleSheet.create({
   priorityOptionTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#000C56',
+    color: colors.text,
   },
   priorityOptionSub: {
     fontSize: 10.5,
     fontWeight: '600',
-    color: '#6E6696',
+    color: colors.isDark ? colors.secondary : '#6E6696',
     marginTop: 2,
     textAlign: 'center',
   },

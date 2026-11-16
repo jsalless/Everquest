@@ -3,6 +3,7 @@ import {
   BADGE2_SVG,
   BADGE3_SVG,
 } from '../components/characterSvgAssets';
+import { loadSavedTasks } from './taskService';
 
 const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
@@ -10,7 +11,6 @@ const API_URL = (
 
 const BADGES_STORAGE_KEY = 'everquest_user_badges_v1';
 const FOCUS_DAILY_STATS_KEY = 'everquest_focus_daily_stats_v1';
-const TASKS_STORAGE_KEY = 'everquest_tasks_v1';
 
 export const BADGE_SVG_MAP = {
   badge1: BADGE1_SVG,
@@ -146,15 +146,8 @@ function writeLocalStorage(key, value) {
 }
 
 function getLocalActivitySnapshot() {
-  let tasksCompleted = 0;
+  const tasksCompleted = loadSavedTasks().filter((t) => Boolean(t?.completed)).length;
   let focusSeconds = 0;
-
-  try {
-    const rawTasks = readLocalStorage(TASKS_STORAGE_KEY, null);
-    if (Array.isArray(rawTasks)) {
-      tasksCompleted = rawTasks.filter((t) => Boolean(t?.completed)).length;
-    }
-  } catch (_) {}
 
   try {
     const rawFocus = readLocalStorage(FOCUS_DAILY_STATS_KEY, null);
