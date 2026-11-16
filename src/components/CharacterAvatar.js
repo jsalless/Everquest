@@ -5,6 +5,12 @@ import {
   RACE_GOBLIN_SVG,
   EYE1_SVG,
   HAIR1_SVG,
+  HAIR2_BACK_SVG,
+  HAIR2_FRONT_SVG,
+  HAIR3_SVG,
+  HAIR4_SVG,
+  HAIR5_SVG,
+  HAIR6_SVG,
   SHIRT1_SVG,
   LEG1_SVG,
   SHOE1_SVG,
@@ -80,6 +86,31 @@ export const HAIR_OPTIONS = [
   {
     id: 'hair1',
     name: 'Cabelo Aventureiro',
+    swatchColor: '#1B0700',
+  },
+  {
+    id: 'hair2',
+    name: 'Cabelo Longo',
+    swatchColor: '#1B0700',
+  },
+  {
+    id: 'hair3',
+    name: 'Mechas Longas',
+    swatchColor: '#1B0700',
+  },
+  {
+    id: 'hair4',
+    name: 'Rabo de Cavalo',
+    swatchColor: '#1B0700',
+  },
+  {
+    id: 'hair5',
+    name: 'Cabelo Ondulado',
+    swatchColor: '#1B0700',
+  },
+  {
+    id: 'hair6',
+    name: 'Cabelo Rebelde',
     swatchColor: '#1B0700',
   },
   {
@@ -167,6 +198,12 @@ const INNER_RACE_HUMAN = extractInnerSvg(RACE_HUMAN_SVG);
 const INNER_RACE_GOBLIN = extractInnerSvg(RACE_GOBLIN_SVG);
 const INNER_EYE1 = extractInnerSvg(EYE1_SVG);
 const INNER_HAIR1 = extractInnerSvg(HAIR1_SVG);
+const INNER_HAIR2_BACK = extractInnerSvg(HAIR2_BACK_SVG);
+const INNER_HAIR2_FRONT = extractInnerSvg(HAIR2_FRONT_SVG);
+const INNER_HAIR3 = extractInnerSvg(HAIR3_SVG);
+const INNER_HAIR4 = extractInnerSvg(HAIR4_SVG);
+const INNER_HAIR5 = extractInnerSvg(HAIR5_SVG);
+const INNER_HAIR6 = extractInnerSvg(HAIR6_SVG);
 const INNER_SHIRT1 = extractInnerSvg(SHIRT1_SVG);
 const INNER_LEG1 = extractInnerSvg(LEG1_SVG);
 const INNER_SHOE1 = extractInnerSvg(SHOE1_SVG);
@@ -223,18 +260,41 @@ export default function CharacterAvatar({
         ? `<g transform="translate(${HUMAN_OFFSET_X + 50.3}, 128.7)">${eyesColored}</g>`
         : '';
 
-    const hairColored = merged.hairColor
-      ? INNER_HAIR1.replace(/#1B0700/gi, merged.hairColor)
-      : INNER_HAIR1;
-    const hairLayer =
-      merged.hair !== 'none'
-        ? `<g transform="translate(${HUMAN_OFFSET_X - 26.02}, -54.32)">${hairColored}</g>`
-        : '';
+    const colorizeHair = (svgInner) =>
+      merged.hairColor
+        ? svgInner.replace(/#1B0700/gi, merged.hairColor)
+        : svgInner;
+
+    const isHair2 = merged.hair === 'hair2';
+    const hair2BackColored = colorizeHair(INNER_HAIR2_BACK);
+    const hair2FrontColored = colorizeHair(INNER_HAIR2_FRONT);
+
+    // A parte longa de trás do hair2 fica atrás da cabeça/corpo/roupas
+    const backHairLayer = isHair2
+      ? `<g transform="translate(${HUMAN_OFFSET_X - 28.5}, -64.5)">${hair2BackColored}</g>`
+      : '';
+
+    // A franja e o topo do cabelo ficam na frente do rosto e dos olhos
+    let hairLayer = '';
+    if (merged.hair === 'hair2') {
+      hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 28.5}, -64.5)">${hair2FrontColored}</g>`;
+    } else if (merged.hair === 'hair3') {
+      hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 40.5}, -62)">${colorizeHair(INNER_HAIR3)}</g>`;
+    } else if (merged.hair === 'hair4') {
+      hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 35.5}, -112)">${colorizeHair(INNER_HAIR4)}</g>`;
+    } else if (merged.hair === 'hair5') {
+      hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 45.5}, -56)">${colorizeHair(INNER_HAIR5)}</g>`;
+    } else if (merged.hair === 'hair6') {
+      hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 27.5}, -44)">${colorizeHair(INNER_HAIR6)}</g>`;
+    } else if (merged.hair !== 'none') {
+      hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 26.02}, -54.32)">${colorizeHair(INNER_HAIR1)}</g>`;
+    }
 
     // Quando cropToWaist=true (usado no banner da tela de Perfil), corta na altura da calça/bolsos igual ao print enviado
-    const viewBox = cropToWaist ? '0 -62 427 430' : '0 -62 427 562';
+    const viewBox = cropToWaist ? '0 -115 427 483' : '0 -115 427 615';
 
     return `<svg viewBox="${viewBox}" fill="none" xmlns="http://www.w3.org/2000/svg">
+      ${backHairLayer}
       ${raceLayer}
       ${shoesLayer}
       ${shirtLayer}

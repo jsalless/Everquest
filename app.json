@@ -2,6 +2,16 @@
   "expo": {
     "name": "Everquest",
     "slug": "Everquest",
+    "scheme": "everquest",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita o acesso à câmera para ler convites de amizade.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

@@ -17,6 +17,7 @@ import {
 import Svg, { Rect, Path, Line, Circle } from 'react-native-svg';
 import Navbar from '../components/Navbar';
 import { toast } from '../utils/toast';
+import { syncDailyActivityProgress } from '../services/dailyQuestService';
 
 const goblinFocoImage = require('../../assets/GoblinFoco.png');
 
@@ -529,6 +530,7 @@ function StatsBarChartIcon({ size = 22, color = '#000C56' }) {
 }
 
 export default function FocusScreen({
+  user,
   activeTab = 'focus',
   onChangeTab,
   onFocusStateChange,
@@ -601,6 +603,18 @@ export default function FocusScreen({
     saveDailyStats(updatedStats);
     setDailyStats(updatedStats);
     setSelectedBucketKey(null);
+
+    syncDailyActivityProgress(user, {
+      eventType: 'focus_session_completed',
+      focusSessionsDelta: 1,
+      focusSecondsDelta: focusedSeconds,
+    }).then((res) => {
+      if (res?.newlyCompleted?.length > 0) {
+        toast.info(
+          `Daily Quest concluída: "${res.newlyCompleted[0].title}"! Resgate sua recompensa no Perfil.`
+        );
+      }
+    });
   };
 
   useEffect(() => {
@@ -925,7 +939,6 @@ export default function FocusScreen({
   const displayedTitle = activeBucket
     ? activeBucket.shortTitle
     : periodView.periodShortTitle;
-  const todayTotalSeconds = dailyStats[getDateKey()]?.totalSeconds || 0;
 
   return (
     <View style={styles.root}>
@@ -943,11 +956,6 @@ export default function FocusScreen({
             accessibilityLabel="Ver estatísticas de foco por dia"
           >
             <StatsBarChartIcon size={20} color="#000C56" />
-            {todayTotalSeconds > 0 && (
-              <Text style={styles.statsHeaderBadgeText}>
-                {formatDurationHuman(todayTotalSeconds)}
-              </Text>
-            )}
           </TouchableOpacity>
         </Animated.View>
 
@@ -1391,9 +1399,6 @@ export default function FocusScreen({
                 <Text style={styles.chartDistributionTitle}>
                   Distribuição do tempo de foco
                 </Text>
-                <View style={styles.chartInfoCircle}>
-                  <Text style={styles.chartInfoIconText}>i</Text>
-                </View>
               </View>
 
               <View style={styles.chartDivider} />
@@ -1618,22 +1623,15 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   statsHeaderButton: {
-    minHeight: 42,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
+    width: 42,
+    height: 42,
     borderRadius: 21,
     backgroundColor: '#F3EEFF',
     borderWidth: 1.5,
     borderColor: 'rgba(113, 83, 253, 0.25)',
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
-  },
-  statsHeaderBadgeText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#000C56',
   },
   centerContent: {
     flex: 1,
@@ -2057,20 +2055,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: '#000C56',
-  },
-  chartInfoCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: '#B8B0D8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chartInfoIconText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E85B5',
   },
   chartDivider: {
     width: '100%',

@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Profile {
+  id             String   @id
+  email          String?  @unique
+  username       String   @unique
+  character_name String   @default("Aventureiro")
+  level          Int      @default(1)
+  xp             Int      @default(0)
+  coins          Int      @default(0)
+  avatar_config  Json     @default("{\"race\":\"human\",\"skinColor\":\"#F4C2A8\",\"hair\":\"hair1\",\"hairColor\":\"#1B0700\",\"shirtColor\":\"#7153FD\",\"pantsColor\":\"#272E59\"}")
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  sentFriendships     Friendship[]           @relation("UserFriendships")
+  receivedFriendships Friendship[]           @relation("FriendOfFriendships")
+  activityCounters    DailyActivityCounter[]
+  dailyQuests         DailyQuest[]
+  userBadges          UserBadge[]
+
+  @@index([username])
+  @@index([character_name])
+  @@map("profiles")
+}
+
+model Friendship {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String
+  friend_id  String
+  status     String   @default("accepted")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user   Profile @relation("UserFriendships", fields: [user_id], references: [id], onDelete: Cascade)
+  friend Profile @relation("FriendOfFriendships", fields: [friend_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, friend_id])
+  @@index([user_id])
+  @@index([friend_id])
+  @@index([status])
+  @@map("friendships")
+}
+
+model DailyActivityCounter {
+  user_id         String
+  activity_date   String
+  focus_sessions  Int      @default(0)
+  focus_seconds   Int      @default(0)
+  tasks_completed Int      @default(0)
+  tasks_created   Int      @default(0)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, activity_date])
+  @@map("daily_activity_counters")
+}
+
+model DailyQuest {
+  id         String    @id @default(uuid()) @db.Uuid
+  user_id    String
+  quest_date String
+  tier       String
+  quest_id   String
+  title      String
+  metric     String
+  target     Int       @default(1)
+  progress   Int       @default(0)
+  completed  Boolean   @default(false)
+  claimed    Boolean   @default(false)
+  claimed_at DateTime? @db.Timestamptz(6)
+  coins      Int
+  xp         Int
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, quest_date, tier])
+  @@index([user_id, quest_date])
+  @@map("daily_quests")
+}
+
+model Badge {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  image       String
+  goal_type   String
+  goal_target Int      @default(1)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id          String    @id @default(uuid()) @db.Uuid
+  user_id     String
+  badge_id    String
+  progress    Int       @default(0)
+  unlocked    Boolean   @default(false)
+  unlocked_at DateTime? @db.Timestamptz(6)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user  Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  badge Badge   @relation(fields: [badge_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, badge_id])
+  @@index([user_id])
+  @@index([badge_id])
+  @@map("user_badges")
+}

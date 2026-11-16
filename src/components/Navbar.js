@@ -11,7 +11,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 
 export const NAV_TABS = [
   { id: 'map', label: 'Mapa' },
-  { id: 'duel', label: 'Duelo' },
+  { id: 'shop', label: 'Loja' },
   { id: 'focus', label: 'Foco' },
   { id: 'tasks', label: 'Tarefas' },
   { id: 'profile', label: 'Perfil' },
@@ -80,19 +80,18 @@ function NavIcon({ id, color, size = 22 }) {
           <Path d="M16.2 5.5L22 3V18.5L16.2 21V5.5Z" fill={color} />
         </Svg>
       );
+    case 'shop':
     case 'duel':
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          {/* Toldo superior da loja */}
           <Path
-            d="M19.8 3.2C20.4 3.2 20.8 3.6 20.8 4.2L20.6 8.6L11.9 17.3L6.7 12.1L15.4 3.4L19.8 3.2Z"
+            d="M3.6 3.5C3.0 3.5 2.5 3.9 2.3 4.5L1.3 8.5C1.1 9.4 1.6 10.4 2.5 10.8C3.5 11.2 4.7 11.0 5.5 10.2C6.3 11.1 7.6 11.3 8.7 10.7C9.1 10.5 9.4 10.3 9.6 10.0C10.4 11.0 11.8 11.3 13.0 10.7C13.4 10.5 13.8 10.3 14.0 10.0C14.8 11.0 16.2 11.3 17.4 10.7C17.8 10.5 18.1 10.3 18.4 10.0C19.2 10.9 20.4 11.2 21.5 10.8C22.4 10.4 22.9 9.4 22.7 8.5L21.7 4.5C21.5 3.9 21.0 3.5 20.4 3.5H3.6Z"
             fill={color}
           />
+          {/* Estrutura inferior da loja com porta e vitrine */}
           <Path
-            d="M4.9 12.7L6.3 11.3L12.7 17.7L11.3 19.1L4.9 12.7Z"
-            fill={color}
-          />
-          <Path
-            d="M3.2 18.8L6.2 15.8L8.2 17.8L5.2 20.8C4.6 21.3 3.7 21.3 3.2 20.8C2.7 20.3 2.7 19.4 3.2 18.8Z"
+            d="M4 12.2V19.5C4 20.3 4.7 21 5.5 21H18.5C19.3 21 20 20.3 20 19.5V12.2C19.1 12.4 18.1 12.2 17.3 11.7C16.0 12.4 14.4 12.3 13.2 11.6C12.0 12.3 10.4 12.4 9.1 11.7C8.0 12.3 6.6 12.4 5.5 11.8C5.0 12.0 4.5 12.2 4 12.2ZM7.5 14.5H11.5V19H7.5V14.5ZM13.5 14.5H16.5V17.5H13.5V14.5Z"
             fill={color}
           />
         </Svg>
