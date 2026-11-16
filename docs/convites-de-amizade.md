@@ -9,6 +9,11 @@ Em dispositivos físicos, configure `EXPO_PUBLIC_API_URL` com um endereço
 acessível pela rede; `localhost` aponta para o próprio dispositivo. Não há
 confirmação offline de pedidos.
 
+O servidor Prisma não cria usuários de demonstração nem amizades automáticas
+na inicialização. A busca consulta os perfis cadastrados, sem sugestões
+fictícias. Registros de demonstração que já estejam no banco não são excluídos
+automaticamente.
+
 O leitor usa `expo-camera`. O esquema `everquest://` e as permissões nativas
 exigem uma nova build de desenvolvimento ou produção após alterar a
 configuração. O leitor dentro do aplicativo também funciona com Expo Go.

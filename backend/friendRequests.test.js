@@ -5,6 +5,72 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
 
+test('inicialização não cria perfis nem amizades de demonstração', async () => {
+  const writes = [];
+  let listening = false;
+  const prisma = {
+    profile: {
+      upsert: async (args) => { writes.push(args); return args.create; },
+      findUnique: async () => null,
+      findFirst: async () => null,
+      create: async (args) => { writes.push(args); return args.data; },
+    },
+    friendship: {
+      upsert: async (args) => { writes.push(args); return args.create; },
+    },
+    badge: { upsert: async () => ({}) },
+  };
+  const serverModule = { exports: {} };
+  const requireStub = (name) => {
+    if (name === 'http') {
+      return { createServer: () => ({ listen: () => { listening = true; } }) };
+    }
+    if (name === '@prisma/client') {
+      return { PrismaClient: function () { return prisma; } };
+    }
+    return require(name);
+  };
+  requireStub.main = serverModule;
+  const context = vm.createContext({
+    require: requireStub,
+    module: serverModule,
+    process: { env: {}, argv: [], exit: () => assert.fail('Inicialização falhou') },
+    console, Buffer, URL,
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, 'prismaServer.js'), 'utf8'), context);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(listening, true);
+  assert.equal(writes.length, 0);
+});
+
+test('sincronizar um perfil real não adiciona amigos automaticamente', async () => {
+  const createdProfiles = [];
+  const createdFriendships = [];
+  const prisma = {
+    profile: {
+      findUnique: async () => null,
+      findFirst: async () => null,
+      create: async ({ data }) => { createdProfiles.push(data); return data; },
+    },
+    friendship: {
+      upsert: async ({ create }) => { createdFriendships.push(create); return create; },
+    },
+  };
+  const context = vm.createContext({
+    require: (name) => name === 'http' ? { createServer: () => ({}) } :
+      name === '@prisma/client' ? { PrismaClient: function () { return prisma; } } : require(name),
+    module: { exports: {} }, process: { env: {}, argv: [] }, console, Buffer, URL,
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, 'prismaServer.js'), 'utf8'), context);
+  await vm.runInContext(
+    'ensureUserProfile({ userId: "real-user", username: "viajante", email: "viajante@example.com" })',
+    context
+  );
+  assert.equal(createdProfiles.length, 1);
+  assert.equal(createdProfiles[0].id, 'real-user');
+  assert.equal(createdFriendships.length, 0);
+});
+
 test('pedidos precisam ser aceitos pelo destinatário antes de virar amizade', async () => {
   const profiles = new Map(['alice', 'bob'].map((id) => [id, {
     id, username: id, character_name: id, xp: 0, avatar_config: { _authHash: 'private' },

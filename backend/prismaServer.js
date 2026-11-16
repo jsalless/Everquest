@@ -92,150 +92,6 @@ const DEFAULT_AVATAR_CONFIG = {
   pantsColor: '#272E59',
 };
 
-const SEED_ADVENTURERS = [
-  {
-    id: 'friend-1',
-    email: 'ayla@everquest.app',
-    username: 'aylamoon',
-    character_name: 'Ayla',
-    level: 7,
-    xp: 640,
-    coins: 45,
-    avatar_config: {
-      race: 'human',
-      skinColor: '#F4C2A8',
-      hair: 'hair2',
-      hairColor: '#8D3B1E',
-      shirtColor: '#7153FD',
-      pantsColor: '#272E59',
-    },
-    auto_friend: true,
-  },
-  {
-    id: 'friend-2',
-    email: 'kael@everquest.app',
-    username: 'kaelstorm',
-    character_name: 'Kael',
-    level: 5,
-    xp: 420,
-    coins: 30,
-    avatar_config: {
-      race: 'human',
-      skinColor: '#D5896B',
-      hair: 'hair6',
-      hairColor: '#0F0F14',
-      shirtColor: '#222123',
-      pantsColor: '#18181F',
-    },
-    auto_friend: true,
-  },
-  {
-    id: 'friend-3',
-    email: 'grok@everquest.app',
-    username: 'grokzen',
-    character_name: 'Grok',
-    level: 9,
-    xp: 840,
-    coins: 80,
-    avatar_config: {
-      race: 'goblin',
-      hair: 'hair4',
-      hairColor: '#E2E8F0',
-      shirtColor: '#2E7D32',
-      pantsColor: '#4E311F',
-    },
-    auto_friend: true,
-  },
-  {
-    id: 'friend-4',
-    email: 'lyra@everquest.app',
-    username: 'lyrastar',
-    character_name: 'Lyra',
-    level: 4,
-    xp: 335,
-    coins: 25,
-    avatar_config: {
-      race: 'human',
-      skinColor: '#E5A687',
-      hair: 'hair5',
-      hairColor: '#E6B84D',
-      shirtColor: '#FBA0FE',
-      pantsColor: '#392682',
-    },
-    auto_friend: true,
-  },
-  {
-    id: 'friend-5',
-    email: 'dante@everquest.app',
-    username: 'dantev',
-    character_name: 'Dante',
-    level: 6,
-    xp: 550,
-    coins: 40,
-    avatar_config: {
-      race: 'human',
-      skinColor: '#8D4A32',
-      hair: 'hair3',
-      hairColor: '#1B0700',
-      shirtColor: '#B71C1C',
-      pantsColor: '#18181F',
-    },
-    auto_friend: true,
-  },
-  {
-    id: 'friend-6',
-    email: 'ziggs@everquest.app',
-    username: 'ziggsfoco',
-    character_name: 'Ziggs',
-    level: 3,
-    xp: 245,
-    coins: 15,
-    avatar_config: {
-      race: 'goblin',
-      hair: 'hair1',
-      hairColor: '#7153FD',
-      shirtColor: '#1B3B8B',
-      pantsColor: '#272E59',
-    },
-    auto_friend: true,
-  },
-  {
-    id: 'friend-7',
-    email: 'orion@everquest.app',
-    username: 'orionblade',
-    character_name: 'Orion',
-    level: 8,
-    xp: 710,
-    coins: 55,
-    avatar_config: {
-      race: 'human',
-      skinColor: '#E5A687',
-      hair: 'hair6',
-      hairColor: '#E2E8F0',
-      shirtColor: '#1B3B8B',
-      pantsColor: '#18181F',
-    },
-    auto_friend: false,
-  },
-  {
-    id: 'friend-8',
-    email: 'mira@everquest.app',
-    username: 'mirasun',
-    character_name: 'Mira',
-    level: 5,
-    xp: 430,
-    coins: 35,
-    avatar_config: {
-      race: 'goblin',
-      hair: 'hair2',
-      hairColor: '#E6B84D',
-      shirtColor: '#7153FD',
-      pantsColor: '#392682',
-    },
-    auto_friend: false,
-  },
-];
-
 const SEED_BADGES = [
   {
     id: 'badge1',
@@ -350,7 +206,7 @@ async function evaluateUserBadges(userId, extraStats = {}) {
 
   const profRow = await prisma.profile.findUnique({ where: { id: userId } });
   if (!profRow) {
-    await ensureUserProfileAndDefaultFriends({
+    await ensureUserProfile({
       userId,
       username: userId,
       characterName: 'Johnn',
@@ -586,7 +442,7 @@ function computeQuestProgressFromCounters(metric, target, counters) {
   return Math.min(safeTarget, Math.max(0, rawVal));
 }
 
-async function ensureUserProfileAndDefaultFriends({
+async function ensureUserProfile({
   userId,
   username,
   characterName = 'Johnn',
@@ -625,23 +481,6 @@ async function ensureUserProfileAndDefaultFriends({
         avatar_config: avatarConfig || DEFAULT_AVATAR_CONFIG,
       },
     });
-
-    for (const adv of SEED_ADVENTURERS) {
-      if (!adv.auto_friend || adv.id === userId) continue;
-      await prisma.friendship
-        .upsert({
-          where: {
-            user_id_friend_id: { user_id: userId, friend_id: adv.id },
-          },
-          update: {},
-          create: {
-            user_id: userId,
-            friend_id: adv.id,
-            status: 'accepted',
-          },
-        })
-        .catch(() => {});
-    }
 
     return serializeProfile(created);
   }
@@ -808,40 +647,6 @@ async function ensureDailyQuestsAndEvaluate(userId, dateKey) {
   return finalRows.map(serializeDailyQuest);
 }
 
-async function seedDatabase() {
-  for (const adv of SEED_ADVENTURERS) {
-    await prisma.profile.upsert({
-      where: { id: adv.id },
-      update: {
-        character_name: adv.character_name,
-        level: adv.level,
-        avatar_config: adv.avatar_config,
-      },
-      create: {
-        id: adv.id,
-        email: adv.email,
-        username: adv.username,
-        character_name: adv.character_name,
-        level: adv.level,
-        xp: adv.xp,
-        coins: adv.coins,
-        avatar_config: adv.avatar_config,
-      },
-    });
-  }
-
-  await ensureDefaultBadges();
-
-  await ensureUserProfileAndDefaultFriends({
-    userId: 'guest-jsalless',
-    username: 'jsalless',
-    characterName: 'Johnn',
-    email: 'jsalless@everquest.app',
-  });
-  await ensureDailyQuestsAndEvaluate('guest-jsalless', getTodayDateKey());
-  await evaluateUserBadges('guest-jsalless');
-}
-
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
@@ -917,7 +722,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const newUserId = crypto.randomUUID();
-      const profile = await ensureUserProfileAndDefaultFriends({
+      const profile = await ensureUserProfile({
         userId: newUserId,
         username: rawUsername,
         characterName: rawUsername,
@@ -1025,7 +830,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/profiles/sync') {
       const payload = await readJsonBody(req);
       const userId = String(payload.user_id || 'guest-jsalless').trim();
-      const profile = await ensureUserProfileAndDefaultFriends({
+      const profile = await ensureUserProfile({
         userId,
         username: payload.username || 'jsalless',
         characterName: payload.character_name || 'Johnn',
@@ -1051,7 +856,7 @@ const server = http.createServer(async (req, res) => {
       let profRow = await prisma.profile.findUnique({ where: { id: userId } });
       const profile = profRow
         ? serializeProfile(profRow)
-        : await ensureUserProfileAndDefaultFriends({
+        : await ensureUserProfile({
             userId,
             username: userId,
             characterName: 'Johnn',
@@ -1111,7 +916,7 @@ const server = http.createServer(async (req, res) => {
 
       const profRow = await prisma.profile.findUnique({ where: { id: userId } });
       if (!profRow) {
-        await ensureUserProfileAndDefaultFriends({
+        await ensureUserProfile({
           userId,
           username: userId,
           characterName: 'Johnn',
@@ -1350,7 +1155,7 @@ const server = http.createServer(async (req, res) => {
         where: { id: userId },
       });
       if (!userExists) {
-        await ensureUserProfileAndDefaultFriends({
+        await ensureUserProfile({
           userId,
           username: userId,
           characterName: 'Johnn',
@@ -1624,7 +1429,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  seedDatabase()
+  ensureDefaultBadges()
     .then(() => {
       if (process.argv.includes('--seed-only')) {
         console.log('Seed concluído com sucesso no PostgreSQL do Supabase via Prisma!');

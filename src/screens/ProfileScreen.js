@@ -58,91 +58,6 @@ const CHEST_SVG_BY_TIER = {
 
 export const MOCK_BADGES = DEFAULT_BADGES;
 
-export const MOCK_FRIENDS = [
-  {
-    id: 'friend-1',
-    characterName: 'Ayla',
-    username: '@aylamoon',
-    level: 7,
-    avatarConfig: {
-      race: 'human',
-      skinColor: '#F4C2A8',
-      hair: 'hair2',
-      hairColor: '#8D3B1E',
-      shirtColor: '#7153FD',
-      pantsColor: '#272E59',
-    },
-  },
-  {
-    id: 'friend-2',
-    characterName: 'Kael',
-    username: '@kaelstorm',
-    level: 5,
-    avatarConfig: {
-      race: 'human',
-      skinColor: '#D5896B',
-      hair: 'hair6',
-      hairColor: '#0F0F14',
-      shirtColor: '#222123',
-      pantsColor: '#18181F',
-    },
-  },
-  {
-    id: 'friend-3',
-    characterName: 'Grok',
-    username: '@grokzen',
-    level: 9,
-    avatarConfig: {
-      race: 'goblin',
-      hair: 'hair4',
-      hairColor: '#E2E8F0',
-      shirtColor: '#2E7D32',
-      pantsColor: '#4E311F',
-    },
-  },
-  {
-    id: 'friend-4',
-    characterName: 'Lyra',
-    username: '@lyrastar',
-    level: 4,
-    avatarConfig: {
-      race: 'human',
-      skinColor: '#E5A687',
-      hair: 'hair5',
-      hairColor: '#E6B84D',
-      shirtColor: '#FBA0FE',
-      pantsColor: '#392682',
-    },
-  },
-  {
-    id: 'friend-5',
-    characterName: 'Dante',
-    username: '@dantev',
-    level: 6,
-    avatarConfig: {
-      race: 'human',
-      skinColor: '#8D4A32',
-      hair: 'hair3',
-      hairColor: '#1B0700',
-      shirtColor: '#B71C1C',
-      pantsColor: '#18181F',
-    },
-  },
-  {
-    id: 'friend-6',
-    characterName: 'Ziggs',
-    username: '@ziggsfoco',
-    level: 3,
-    avatarConfig: {
-      race: 'goblin',
-      hair: 'hair1',
-      hairColor: '#7153FD',
-      shirtColor: '#1B3B8B',
-      pantsColor: '#272E59',
-    },
-  },
-];
-
 function GearIcon({ size = 28, color = '#FFFFFF' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -402,9 +317,16 @@ export default function ProfileScreen({
     if (!isAddFriendModalVisible) return;
     let active = true;
     async function loadDirectory() {
-      const results = await searchRegisteredUsers(user, addFriendQuery);
-      if (active) {
-        setDirectoryUsers(results);
+      try {
+        const results = await searchRegisteredUsers(user, addFriendQuery);
+        if (active) {
+          setDirectoryUsers(results);
+        }
+      } catch (error) {
+        if (active) {
+          setDirectoryUsers([]);
+          toast.error(error.message);
+        }
       }
     }
     loadDirectory();
@@ -1305,9 +1227,6 @@ export default function ProfileScreen({
               keyboardShouldPersistTaps="handled"
             >
               <Text style={styles.directorySectionLabel}>PEDIDOS PENDENTES ({pendingRequests.length})</Text>
-              <TouchableOpacity onPress={() => setRequestsRevision((revision) => revision + 1)} accessibilityRole="button">
-                <Text style={styles.pendingRefresh}>Atualizar pedidos</Text>
-              </TouchableOpacity>
               {requestsError ? (
                 <View style={styles.friendsEmptyBox}>
                   <Text style={styles.friendsEmptySub}>{requestsError}</Text>
@@ -1336,7 +1255,7 @@ export default function ProfileScreen({
                 </View>
               )}
               <Text style={styles.directorySectionLabel}>
-                AVENTUREIROS NO BANCO DE DADOS
+                AVENTUREIROS
               </Text>
 
               {directoryUsers.length === 0 ? (
