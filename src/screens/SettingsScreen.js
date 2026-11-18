@@ -7,6 +7,7 @@ import Feather from '@expo/vector-icons/Feather';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import ProfilePageHeader from '../components/ProfilePageHeader';
 import { usePreferences } from '../contexts/PreferencesContext';
 import { useSession } from '../contexts/SessionContext';
 import { clearSession, updateAccount, updatePassword } from '../services/authService';
@@ -94,7 +95,7 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       await cancelAllFocusAlerts();
-      clearSession();
+      await clearSession();
       setSession(null);
       setFriendInvite(null);
       setIsFocusing(false);
@@ -166,20 +167,10 @@ export default function SettingsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.frame}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 10 }]}>
-          <View style={styles.headerTop}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.canGoBack() ? router.back() : router.replace({ pathname: '/', params: { tab: 'profile' } })}
-              accessibilityRole="button"
-              accessibilityLabel="Voltar ao perfil"
-            >
-              <Feather name="arrow-left" size={23} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.heading}>Configurações</Text>
-            <View style={styles.headerSpacer} />
-          </View>
-        </View>
+        <ProfilePageHeader
+          title="Configurações"
+          onBack={() => router.canGoBack() ? router.back() : router.replace({ pathname: '/', params: { tab: 'profile' } })}
+        />
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 20 }]}
@@ -324,13 +315,6 @@ export default function SettingsScreen() {
 const createStyles = (colors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: 430 },
-  header: { backgroundColor: '#000C56', paddingHorizontal: 24, paddingBottom: 26, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  backButton: { width: 44, height: 44, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
-  headerSpacer: { width: 44 },
-  headerEyebrow: { fontSize: 11, letterSpacing: 2, color: '#C4B8FF', fontWeight: '800' },
-  heading: { fontSize: 28, color: '#FFFFFF', fontWeight: '900' },
-  headerDescription: { color: '#D5D4EE', fontSize: 14, marginTop: 6 },
   content: { padding: 20 },
   accountSummary: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, backgroundColor: colors.accentSoft, borderRadius: 20, marginBottom: 6 },
   initialCircle: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#7153FD', alignItems: 'center', justifyContent: 'center' },

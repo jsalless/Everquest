@@ -15,6 +15,7 @@ import {
 import Svg, { Path, Circle, Rect, SvgXml } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import CharacterAvatar from '../components/CharacterAvatar';
+import ProfilePageHeader from '../components/ProfilePageHeader';
 import ProfileQrCode, { buildProfileLink, parseProfileLink } from '../components/ProfileQrCode';
 import { EverquestLogo2 } from '../components/QrCodeGenerator';
 import {
@@ -141,20 +142,6 @@ function ChevronRightIcon({ size = 18, color = '#1A1A1A' }) {
   );
 }
 
-function BackArrowIcon({ size = 22, color = '#FFFFFF' }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M19 12H5M11 6L5 12L11 18"
-        stroke={color}
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 function CloseIcon({ size = 24, color = '#1A1A1A' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -205,6 +192,7 @@ function SearchLensIcon({ size = 18, color = '#7C8292' }) {
 
 export default function ProfileScreen({
   user,
+  serverManaged = false,
   avatarConfig,
   activeTab = 'profile',
   onChangeTab,
@@ -285,7 +273,7 @@ export default function ProfileScreen({
     let isMounted = true;
     async function initProfileProgressionAndFriends() {
       try {
-        await syncUserProfileToBackend({
+        if (!serverManaged) await syncUserProfileToBackend({
           user,
           avatarConfig,
           level: loadedLevel.level,
@@ -327,7 +315,7 @@ export default function ProfileScreen({
     return () => {
       isMounted = false;
     };
-  }, [user, avatarConfig]);
+  }, [user, avatarConfig, serverManaged]);
 
   useEffect(() => {
     if (!isAddFriendModalVisible) return;
@@ -455,18 +443,20 @@ export default function ProfileScreen({
     setClaimingTier(tierKey);
     try {
       const { quests, rewards, rewardGranted, message } =
-        await claimDailyQuestReward(user, tierKey);
+        await claimDailyQuestReward(user, tierKey, { serverManaged });
       setDailyQuests(quests);
       setUserRewards(rewards);
 
-      const updatedLevel = getLevelProgressFromXp(rewards.xp);
-      syncUserProfileToBackend({
-        user,
-        avatarConfig,
-        level: updatedLevel.level,
-        xp: rewards.xp,
-        coins: rewards.coins,
-      });
+      if (!serverManaged) {
+        const updatedLevel = getLevelProgressFromXp(rewards.xp);
+        syncUserProfileToBackend({
+          user,
+          avatarConfig,
+          level: updatedLevel.level,
+          xp: rewards.xp,
+          coins: rewards.coins,
+        });
+      }
 
       if (rewardGranted) {
         toast.success(
@@ -812,19 +802,7 @@ export default function ProfileScreen({
       >
         <View style={styles.modalScreenRoot}>
           <View style={[styles.modalMobileFrame, { width: containerWidth }]}>
-            <View style={styles.insigniasTopHeader}>
-              <TouchableOpacity
-                style={styles.insigniasBackButton}
-                activeOpacity={0.8}
-                onPress={() => setIsAllBadgesVisible(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Voltar para o perfil"
-              >
-                <BackArrowIcon size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.insigniasHeaderTitle}>Insígnias</Text>
-              <View style={styles.insigniasHeaderRightSpacer} />
-            </View>
+            <ProfilePageHeader title="Insígnias" onBack={() => setIsAllBadgesVisible(false)} />
 
             <ScrollView
               style={styles.insigniasScroll}
@@ -954,34 +932,26 @@ export default function ProfileScreen({
       >
         <View style={styles.modalScreenRoot}>
           <View style={[styles.modalMobileFrame, { width: containerWidth }]}>
-            <View style={styles.insigniasTopHeader}>
-              <TouchableOpacity
-                style={styles.insigniasBackButton}
-                activeOpacity={0.8}
-                onPress={() => setIsFriendsModalVisible(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Voltar para o perfil"
-              >
-                <BackArrowIcon size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.insigniasHeaderTitle}>
-                Amigos ({friendsTotalCount})
-              </Text>
-              <TouchableOpacity
-                style={styles.friendsHeaderAddShortcut}
-                activeOpacity={0.85}
-                onPress={() => {
-                  setIsFriendsModalVisible(false);
-                  setAddFriendQuery('');
-                  setRequestsError('');
-                  setIsAddFriendModalVisible(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Adicionar novo amigo"
-              >
-                <AddFriendIcon size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <ProfilePageHeader
+              title={`Amigos (${friendsTotalCount})`}
+              onBack={() => setIsFriendsModalVisible(false)}
+              rightAction={(
+                <TouchableOpacity
+                  style={styles.friendsHeaderAddShortcut}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setIsFriendsModalVisible(false);
+                    setAddFriendQuery('');
+                    setRequestsError('');
+                    setIsAddFriendModalVisible(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adicionar novo amigo"
+                >
+                  <AddFriendIcon size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            />
 
             {/* Barra de Pesquisa de Amigos */}
             <View style={styles.friendsSearchBarWrapper}>
@@ -1155,22 +1125,13 @@ export default function ProfileScreen({
       >
         <View style={styles.modalScreenRoot}>
           <View style={[styles.modalMobileFrame, { width: containerWidth }]}>
-            <View style={styles.insigniasTopHeader}>
-              <TouchableOpacity
-                style={styles.insigniasBackButton}
-                activeOpacity={0.8}
-                onPress={() => {
-                  if (isScanning) setIsScanning(false);
-                  else setIsAddFriendModalVisible(false);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Voltar para o perfil"
-              >
-                <BackArrowIcon size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.insigniasHeaderTitle}>Adicionar Amigos</Text>
-              <View style={styles.insigniasHeaderRightSpacer} />
-            </View>
+            <ProfilePageHeader
+              title="Adicionar Amigos"
+              onBack={() => {
+                if (isScanning) setIsScanning(false);
+                else setIsAddFriendModalVisible(false);
+              }}
+            />
 
             {isScanning ? (
               <View style={styles.scannerContainer}>
@@ -1984,34 +1945,6 @@ const createStyles = (colors) => StyleSheet.create({
   modalMobileFrame: {
     flex: 1,
     backgroundColor: colors.isDark ? colors.elevated : '#FAF8F6',
-  },
-  insigniasTopHeader: {
-    width: '100%',
-    backgroundColor: '#000C56',
-    paddingTop: 22,
-    paddingBottom: 22,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  insigniasBackButton: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
-  },
-  insigniasHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  insigniasHeaderRightSpacer: {
-    width: 38,
   },
   insigniasScroll: {
     flex: 1,

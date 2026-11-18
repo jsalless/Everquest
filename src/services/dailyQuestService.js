@@ -731,7 +731,7 @@ export async function syncDailyActivityProgress(user, eventOptions = {}) {
  * automaticamente pelo cumprimento dos requisitos.
  * Não permite concluir a missão manualmente!
  */
-export async function claimDailyQuestReward(user, tierKey) {
+export async function claimDailyQuestReward(user, tierKey, { serverManaged = false } = {}) {
   const userKey = getUserKey(user);
   const todayKey = getTodayKey();
 
@@ -788,6 +788,10 @@ export async function claimDailyQuestReward(user, tierKey) {
       !err.message.includes('Network request failed')
     ) {
       throw err;
+    }
+
+    if (serverManaged) {
+      throw new Error('Não foi possível confirmar o resgate no servidor. Verifique a conexão e tente novamente.');
     }
 
     // Fallback local caso o servidor FastAPI esteja offline (também exige completed === true)

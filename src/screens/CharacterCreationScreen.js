@@ -1,5 +1,5 @@
 import { usePreferences } from '../contexts/PreferencesContext';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -30,18 +30,40 @@ import CharacterAvatar, {
   saveAvatarConfig,
 } from '../components/CharacterAvatar';
 import { toast } from '../utils/toast';
+import { catalog } from '../services/shopService';
+import { AVATAR_STAT_LABELS, formatEquipmentBonuses, getAvatarStats, STARTER_EQUIPMENT } from '../services/avatarEquipment';
 
-const CATEGORIES = [
+const APPEARANCE_CATEGORIES = [
   { id: 'race', label: 'Raça' },
   { id: 'hair', label: 'Cabelo' },
   { id: 'eyes', label: 'Olhos' },
-  { id: 'shirt', label: 'Camisa' },
-  { id: 'pants', label: 'Calça' },
-  { id: 'shoes', label: 'Calçado' },
+];
+const EQUIPMENT_CATEGORIES = [
+  { id: 'head', label: 'Cabeça' },
+  { id: 'shirt', label: 'Torso' },
+  { id: 'pants', label: 'Pernas' },
+  { id: 'shoes', label: 'Pés' },
+  { id: 'weapon', label: 'Arma' },
 ];
 
 function CategoryIcon({ categoryId, active }) {
   const color = active ? '#FBA0FE' : '#7B72A6';
+
+  if (categoryId === 'head' || categoryId === 'weapon') {
+    return (
+      <Svg width={24} height={24} viewBox="0 0 28 28" fill="none">
+        <Path
+          d={categoryId === 'head'
+            ? 'M 7 15 L 10 7 Q 14 4 18 7 L 21 15 M 14 14 C 27 14 27 22 14 22 C 1 22 1 14 14 14 Z'
+            : 'M 11 15 L 18 6 L 23 5 L 22 10 L 13 17 M 9 13 L 15 19 M 12 16 L 6 22'}
+          stroke={color}
+          strokeWidth="2.1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    );
+  }
 
   if (categoryId === 'race') {
     return (
@@ -143,6 +165,10 @@ function CategoryIcon({ categoryId, active }) {
 
 export default function CharacterCreationScreen({
   initialConfig,
+  initialCategory,
+  loadWardrobe,
+  shopToken,
+  onSave,
   onComplete,
   isEditing = false,
   onCancel,
@@ -157,8 +183,28 @@ export default function CharacterCreationScreen({
       characterName: isEditing ? saved.characterName || 'Johnn' : '',
     };
   });
-  const [activeCategory, setActiveCategory] = useState('race');
+  const [activeCategory, setActiveCategory] = useState(() =>
+    [...APPEARANCE_CATEGORIES, ...EQUIPMENT_CATEGORIES].some(({ id }) => id === initialCategory)
+      ? initialCategory
+      : 'race'
+  );
   const [isNameModalVisible, setIsNameModalVisible] = useState(false);
+  const [ownedItems, setOwnedItems] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const saving = useRef(false);
+
+  useEffect(() => {
+    if (!loadWardrobe) return undefined;
+    const controller = new AbortController();
+    loadWardrobe(shopToken, controller.signal)
+      .then(({ ownedItemIds }) => {
+        if (!controller.signal.aborted) setOwnedItems(ownedItemIds);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) toast.error(error.message);
+      });
+    return () => controller.abort();
+  }, [loadWardrobe, shopToken]);
 
   const { width: windowWidth } = useWindowDimensions();
   const containerWidth = Math.min(windowWidth, 430);
@@ -174,7 +220,8 @@ export default function CharacterCreationScreen({
     setIsNameModalVisible(true);
   };
 
-  const handleConfirmCharacter = () => {
+  const handleConfirmCharacter = async () => {
+    if (saving.current) return;
     const cleanName = (avatarConfig.characterName || '').trim();
     if (!cleanName) {
       toast.warn('Escolha um nome para o seu personagem antes de continuar!');
@@ -185,7 +232,19 @@ export default function CharacterCreationScreen({
       ...avatarConfig,
       characterName: cleanName,
     };
-    const saved = saveAvatarConfig(finalConfig);
+    saving.current = true;
+    setIsSaving(true);
+    let saved;
+    try {
+      const savedConfig = onSave ? await onSave(shopToken, finalConfig) : finalConfig;
+      saved = saveAvatarConfig(savedConfig);
+    } catch (error) {
+      toast.error(error.message);
+      return;
+    } finally {
+      saving.current = false;
+      setIsSaving(false);
+    }
     setIsNameModalVisible(false);
 
     toast.success(
@@ -197,6 +256,31 @@ export default function CharacterCreationScreen({
     if (onComplete) {
       onComplete(saved);
     }
+  };
+
+  const equipmentSection = (slot, title, options, colors = [], swatchTitle, secondaryColor) => {
+    const colorField = `${slot}Color`;
+    const starter = STARTER_EQUIPMENT.filter((item) => item.slot === slot);
+    const owned = catalog.filter((item) => item.slot === slot && (ownedItems.includes(item.id) || avatarConfig[slot] === item.id));
+    return {
+      swatchTitle,
+      swatches: options.some(({ id }) => id === avatarConfig[slot]) ? colors.map((color) => ({
+        id: color.id,
+        color: color.id,
+        secondaryColor,
+        selected: avatarConfig[colorField] === color.id,
+        onSelect: () => handleSelectField(colorField, color.id),
+      })) : [],
+      gridTitle: title,
+      cards: [...options, ...starter, ...owned].map(({ id, name, stats }) => ({
+        id,
+        name,
+        bonuses: formatEquipmentBonuses(stats).join(' · '),
+        selected: avatarConfig[slot] === id,
+        previewConfig: { ...avatarConfig, [slot]: id },
+        onSelect: () => handleSelectField(slot, id),
+      })),
+    };
   };
 
   const getCurrentSection = () => {
@@ -256,68 +340,26 @@ export default function CharacterCreationScreen({
           })),
         };
 
+      case 'head':
+        return equipmentSection('head', 'Equipamentos de cabeça', [{ id: 'none', name: 'Sem equipamento' }]);
+
       case 'shirt':
-        return {
-          swatchTitle: 'Cor da camisa',
-          swatches: SHIRT_COLORS.map((c) => ({
-            id: c.id,
-            color: c.id,
-            selected: avatarConfig.shirtColor === c.id,
-            onSelect: () => handleSelectField('shirtColor', c.id),
-          })),
-          gridTitle: 'Camisa',
-          cards: SHIRT_OPTIONS.map((s) => ({
-            id: s.id,
-            name: s.name,
-            selected: avatarConfig.shirt === s.id,
-            previewConfig: { ...avatarConfig, shirt: s.id },
-            onSelect: () => handleSelectField('shirt', s.id),
-          })),
-        };
-
+        return equipmentSection('shirt', 'Equipamentos de torso', SHIRT_OPTIONS, SHIRT_COLORS, 'Cor da camisa');
       case 'pants':
-        return {
-          swatchTitle: 'Cor da calça',
-          swatches: PANTS_COLORS.map((c) => ({
-            id: c.id,
-            color: c.id,
-            secondaryColor: '#FFEF64',
-            selected: avatarConfig.pantsColor === c.id,
-            onSelect: () => handleSelectField('pantsColor', c.id),
-          })),
-          gridTitle: 'Calça',
-          cards: PANTS_OPTIONS.map((p) => ({
-            id: p.id,
-            name: p.name,
-            selected: avatarConfig.pants === p.id,
-            previewConfig: { ...avatarConfig, pants: p.id },
-            onSelect: () => handleSelectField('pants', p.id),
-          })),
-        };
+        return equipmentSection('pants', 'Equipamentos de pernas', PANTS_OPTIONS, PANTS_COLORS, 'Cor da calça', '#FFEF64');
 
+      case 'weapon':
+        return equipmentSection('weapon', 'Armas', [{ id: 'none', name: 'Sem arma' }]);
       case 'shoes':
       default:
-        return {
-          swatchTitle: 'Cor do calçado',
-          swatches: SHOES_COLORS.map((c) => ({
-            id: c.id,
-            color: c.id,
-            selected: avatarConfig.shoesColor === c.id,
-            onSelect: () => handleSelectField('shoesColor', c.id),
-          })),
-          gridTitle: 'Calçado',
-          cards: SHOES_OPTIONS.map((sh) => ({
-            id: sh.id,
-            name: sh.name,
-            selected: avatarConfig.shoes === sh.id,
-            previewConfig: { ...avatarConfig, shoes: sh.id },
-            onSelect: () => handleSelectField('shoes', sh.id),
-          })),
-        };
+        return equipmentSection('shoes', 'Equipamentos de pés', SHOES_OPTIONS, SHOES_COLORS, 'Cor do calçado');
     }
   };
 
   const section = getCurrentSection();
+  const stats = getAvatarStats(avatarConfig);
+  const equipmentActive = EQUIPMENT_CATEGORIES.some(({ id }) => id === activeCategory);
+  const categories = equipmentActive ? EQUIPMENT_CATEGORIES : APPEARANCE_CATEGORIES;
 
   return (
     <View style={styles.root}>
@@ -337,7 +379,7 @@ export default function CharacterCreationScreen({
               <View style={styles.headerSpacer} />
             )}
 
-            <Text style={styles.stageHeaderTitle}>Criar Personagem</Text>
+            <Text style={styles.stageHeaderTitle}>{isEditing ? 'Personalizar' : 'Criar Personagem'}</Text>
 
             <TouchableOpacity
               style={styles.doneHeaderBtn}
@@ -352,19 +394,45 @@ export default function CharacterCreationScreen({
             <CharacterAvatar
               config={avatarConfig}
               width={220}
-              height={240}
+              height={192}
               cropToWaist={false}
             />
           </View>
+          <View style={styles.statsPanel}>
+            <Text style={styles.statsHeading} accessibilityRole="header">Atributos do personagem</Text>
+            <View style={styles.statsRow}>
+              {AVATAR_STAT_LABELS.map(({ id, label, color }) => (
+                <View key={id} style={styles.statTile} accessible accessibilityLabel={`${label}: ${stats[id]}`}>
+                  <Text style={[styles.statValue, { color }]}>{stats[id]}</Text>
+                  <Text style={styles.statLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
 
-        {/* Barra de Categorias dos Assets */}
+        <View style={styles.sectionTabs}>
+          {[{ label: 'Aparência', id: 'race', selected: !equipmentActive },
+            { label: 'Equipamentos', id: 'head', selected: equipmentActive }].map(({ label, id, selected }) => (
+            <TouchableOpacity
+              key={id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              style={[styles.sectionTab, selected && styles.sectionTabActive]}
+              onPress={() => !selected && setActiveCategory(id)}
+            >
+              <Text style={[styles.sectionTabText, selected && styles.categoryTabTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <View style={styles.categoryBar}>
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const isActive = activeCategory === cat.id;
             return (
               <TouchableOpacity
                 key={cat.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
                 style={[
                   styles.categoryTab,
                   isActive && styles.categoryTabActive,
@@ -432,11 +500,14 @@ export default function CharacterCreationScreen({
             </>
           ) : null}
 
-          <Text style={styles.sectionHeading}>{section.gridTitle}</Text>
+          <Text style={styles.sectionHeading} accessibilityRole="header">{section.gridTitle}</Text>
           <View style={styles.cardsGrid}>
             {section.cards.map((card) => (
               <TouchableOpacity
                 key={`card-${card.id}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: card.selected }}
+                accessibilityLabel={card.bonuses ? `${card.name}, ${card.bonuses}` : card.name}
                 activeOpacity={0.85}
                 onPress={card.onSelect}
                 style={[
@@ -463,10 +534,10 @@ export default function CharacterCreationScreen({
                       styles.cardFooterLabel,
                       card.selected && styles.cardFooterLabelActive,
                     ]}
-                    numberOfLines={1}
                   >
                     {card.name}
                   </Text>
+                  {!!card.bonuses && <Text style={styles.cardBonus}>{card.bonuses}</Text>}
                 </View>
               </TouchableOpacity>
             ))}
@@ -479,12 +550,12 @@ export default function CharacterCreationScreen({
         visible={isNameModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsNameModalVisible(false)}
+        onRequestClose={() => !saving.current && setIsNameModalVisible(false)}
       >
         <View style={styles.nameModalOverlay}>
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => setIsNameModalVisible(false)}
+            onPress={() => !saving.current && setIsNameModalVisible(false)}
           />
 
           <View
@@ -514,6 +585,7 @@ export default function CharacterCreationScreen({
               placeholder="Ex.: Johnn"
               placeholderTextColor="#8B82B8"
               value={avatarConfig.characterName}
+              editable={!isSaving}
               onChangeText={(txt) => handleSelectField('characterName', txt)}
               maxLength={24}
               autoFocus
@@ -522,6 +594,7 @@ export default function CharacterCreationScreen({
             <View style={styles.nameModalActions}>
               <TouchableOpacity
                 style={styles.nameModalBackBtn}
+                disabled={isSaving}
                 activeOpacity={0.8}
                 onPress={() => setIsNameModalVisible(false)}
               >
@@ -530,11 +603,12 @@ export default function CharacterCreationScreen({
 
               <TouchableOpacity
                 style={styles.nameModalConfirmBtn}
+                disabled={isSaving}
                 activeOpacity={0.88}
                 onPress={handleConfirmCharacter}
               >
                 <Text style={styles.nameModalConfirmBtnText}>
-                  {isEditing ? 'Salvar' : 'Concluir'}
+                  {isSaving ? 'Salvando…' : isEditing ? 'Salvar' : 'Concluir'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -611,6 +685,48 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2,
   },
+  statsPanel: {
+    width: '100%',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  statsHeading: {
+    color: '#D3CCFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  statsRow: { flexDirection: 'row', gap: 5 },
+  statTile: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111A6A',
+    borderRadius: 10,
+    paddingVertical: 5,
+    borderColor: '#4C4D91',
+    borderWidth: 1,
+  },
+  statValue: { fontSize: 19, fontWeight: '900' },
+  statLabel: { fontSize: 10, fontWeight: '700', color: '#E4DEFF', textAlign: 'center' },
+  sectionTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#050E42',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  sectionTab: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#38366F',
+  },
+  sectionTabActive: { backgroundColor: '#1C215F', borderColor: '#C57BE9' },
+  sectionTabText: { color: '#D3CCFF', fontSize: 13, fontWeight: '800' },
   categoryBar: {
     width: '100%',
     flexDirection: 'row',
@@ -735,7 +851,9 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#D3CCFF',
+    textAlign: 'center',
   },
+  cardBonus: { color: '#A8D9FF', fontSize: 11, fontWeight: '700', marginTop: 2, textAlign: 'center' },
   cardFooterLabelActive: {
     color: '#FBA0FE',
     fontWeight: '900',

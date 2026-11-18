@@ -25,10 +25,21 @@ model Profile {
   activityCounters    DailyActivityCounter[]
   dailyQuests         DailyQuest[]
   userBadges          UserBadge[]
+  wardrobeItems       WardrobeItem[]
 
   @@index([username])
   @@index([character_name])
   @@map("profiles")
+}
+
+model WardrobeItem {
+  user_id String
+  item_id String
+
+  user Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, item_id])
+  @@map("wardrobe_items")
 }
 
 model Friendship {

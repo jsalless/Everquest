@@ -2,6 +2,7 @@ const http = require('http');
 const crypto = require('crypto');
 const { URL } = require('url');
 const { PrismaClient } = require('@prisma/client');
+const { issueShopToken, authenticateShop, getShopState, purchaseItem, saveShopAvatar } = require('./shop');
 
 function hashPassword(password) {
   return crypto
@@ -489,10 +490,6 @@ async function ensureUserProfile({
     xp !== null && xp !== undefined
       ? Math.max(Number(existing.xp) || 0, Number(xp) || 0)
       : Number(existing.xp) || 0;
-  const nextCoins =
-    coins !== null && coins !== undefined
-      ? Math.max(Number(existing.coins) || 0, Number(coins) || 0)
-      : Number(existing.coins) || 0;
   const nextLevel = calculateLevelInfo(nextXp).level;
 
   const existingAvatarObj =
@@ -517,8 +514,10 @@ async function ensureUserProfile({
         (characterName || existing.character_name || 'Johnn').trim() || 'Johnn',
       level: nextLevel,
       xp: nextXp,
-      coins: nextCoins,
-      avatar_config: mergedAvatarConfig,
+      ...(coins != null && !existingAvatarObj._authHash
+        ? { coins: Math.max(Number(existing.coins) || 0, Number(coins) || 0) }
+        : {}),
+      ...(avatarConfig ? { avatar_config: mergedAvatarConfig } : {}),
     },
   });
 
@@ -740,6 +739,7 @@ const server = http.createServer(async (req, res) => {
         message: 'Conta criada e autenticada com sucesso!',
         access_token: `eq_token_${profile.id}`,
         refresh_token: `eq_refresh_${profile.id}`,
+        shop_token: issueShopToken(profile.id, hashPassword(rawPassword)),
         user: {
           id: profile.id,
           email: profile.email,
@@ -791,6 +791,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         access_token: `eq_token_${profile.id}`,
         refresh_token: `eq_refresh_${profile.id}`,
+        ...(storedHash ? { shop_token: issueShopToken(profile.id, storedHash) } : {}),
         user: {
           id: profile.id,
           email: profile.email,
@@ -867,6 +868,7 @@ const server = http.createServer(async (req, res) => {
       }
       const profile = serializeProfile(saved);
       return sendJson(res, 200, {
+        shop_token: issueShopToken(profile.id, saved.avatar_config._authHash),
         user: {
           id: profile.id,
           email: profile.email,
@@ -903,9 +905,38 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (
+      (req.method === 'GET' && path === '/shop') ||
+      (req.method === 'POST' && path === '/shop/purchase') ||
+      (req.method === 'PATCH' && path === '/shop/avatar')
+    ) {
+      const profile = await authenticateShop(prisma, req.headers.authorization);
+      if (!profile) {
+        return sendJson(res, 401, { detail: 'Entre novamente pela sua conta do servidor para acessar a loja.' });
+      }
+      if (req.method === 'GET') {
+        return sendJson(res, 200, await getShopState(prisma, profile.id));
+      }
+      const payload = await readJsonBody(req);
+      if (req.method === 'POST') {
+        const { status, ...result } = await purchaseItem(prisma, profile.id, payload?.itemId);
+        return sendJson(res, status, result);
+      }
+      const avatarConfig = await saveShopAvatar(prisma, profile, payload?.avatarConfig);
+      return avatarConfig
+        ? sendJson(res, 200, { avatarConfig })
+        : sendJson(res, 400, { detail: 'Personalização inválida. Verifique o nome e as peças do seu guarda-roupa.' });
+    }
+
     if (req.method === 'POST' && path === '/profiles/sync') {
       const payload = await readJsonBody(req);
       const userId = String(payload.user_id || 'guest-jsalless').trim();
+      const existing = await prisma.profile.findUnique({ where: { id: userId } });
+      if (existing?.avatar_config?._authHash) {
+        const profile = serializeProfile(existing);
+        return sendJson(res, 200, { profile, levelInfo: calculateLevelInfo(profile.xp) });
+      }
+      const { _authHash, ...avatarConfig } = payload.avatar_config || {};
       const profile = await ensureUserProfile({
         userId,
         username: payload.username || 'jsalless',
@@ -913,7 +944,7 @@ const server = http.createServer(async (req, res) => {
         email: payload.email || null,
         xp: payload.xp,
         coins: payload.coins,
-        avatarConfig: payload.avatar_config,
+        avatarConfig: payload.avatar_config ? avatarConfig : null,
       });
       return sendJson(res, 200, {
         profile,
@@ -1101,26 +1132,27 @@ const server = http.createServer(async (req, res) => {
       const rewardCoins = Number(questRow.coins || tierMeta.coins);
       const rewardXp = Number(questRow.xp || tierMeta.xp);
 
-      await prisma.dailyQuest.update({
-        where: { id: questRow.id },
-        data: { claimed: true, claimed_at: new Date() },
+      const updatedProfRow = await prisma.$transaction(async (tx) => {
+        const { count } = await tx.dailyQuest.updateMany({
+          where: { id: questRow.id, claimed: false },
+          data: { claimed: true, claimed_at: new Date() },
+        });
+        if (!count) return null;
+        const updated = await tx.profile.update({
+          where: { id: userId },
+          data: { xp: { increment: rewardXp }, coins: { increment: rewardCoins } },
+        });
+        return tx.profile.update({
+          where: { id: userId },
+          data: { level: calculateLevelInfo(updated.xp).level },
+        });
       });
-
-      const profNow = await prisma.profile.findUnique({ where: { id: userId } });
-      const nextXp = (Number(profNow?.xp) || 0) + rewardXp;
-      const nextCoins = (Number(profNow?.coins) || 0) + rewardCoins;
-      const nextLevelInfo = calculateLevelInfo(nextXp);
-
-      const updatedProfRow = await prisma.profile.update({
-        where: { id: userId },
-        data: {
-          xp: nextXp,
-          coins: nextCoins,
-          level: nextLevelInfo.level,
-        },
-      });
+      if (!updatedProfRow) {
+        return sendJson(res, 409, { detail: 'Você já resgatou a recompensa desta missão hoje.' });
+      }
 
       const updatedProfile = serializeProfile(updatedProfRow);
+      const nextLevelInfo = calculateLevelInfo(updatedProfile.xp);
       const updatedQuests = await ensureDailyQuestsAndEvaluate(userId, targetDate);
 
       return sendJson(res, 200, {

@@ -3,28 +3,35 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import FocusScreen from './src/screens/FocusScreen';
 import TasksScreen from './src/screens/TasksScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ShopScreen from './src/screens/ShopScreen';
+import StoryScreen from './src/screens/StoryScreen';
 import { useSession } from './src/contexts/SessionContext';
 
 export default function App() {
   const { tab } = useLocalSearchParams();
-  const activeTab = typeof tab === 'string' ? tab : 'focus';
+  const activeTab = typeof tab === 'string' ? tab : 'map';
   const {
     session, avatarConfig, friendInvite, setFriendInvite, setIsFocusing,
   } = useSession();
   useEffect(() => {
-    if (session && friendInvite && activeTab !== 'profile') {
+    if (session && !session.needsOnboarding && friendInvite && activeTab !== 'profile') {
       router.replace({ pathname: '/', params: { tab: 'profile' } });
     }
   }, [session, friendInvite, activeTab]);
 
   if (!session) return <Redirect href="/login" />;
+  if (session.needsOnboarding) return <Redirect href="/onboarding" />;
   const onChangeTab = (nextTab) => router.replace({ pathname: '/', params: { tab: nextTab } });
   const user = session.user || session;
+  if (activeTab === 'map') {
+    return <StoryScreen key={user.id} userId={user.id} onChangeTab={onChangeTab} />;
+  }
   if (activeTab === 'profile') {
     return (
       <ProfileScreen
         key={user.id}
         user={user}
+        serverManaged={!!session.shop_token}
         avatarConfig={avatarConfig}
         friendInvite={friendInvite}
         onConsumeFriendInvite={() => setFriendInvite(null)}
@@ -37,6 +44,16 @@ export default function App() {
   }
   if (activeTab === 'tasks') {
     return <TasksScreen user={user} activeTab={activeTab} onChangeTab={onChangeTab} />;
+  }
+  if (activeTab === 'shop') {
+    return (
+      <ShopScreen
+        key={`${user.id}:${session.shop_token || ''}`}
+        token={session.shop_token}
+        onChangeTab={onChangeTab}
+        onOpenWardrobe={(slot) => router.push({ pathname: '/character', params: { editing: 'true', slot } })}
+      />
+    );
   }
   return (
     <FocusScreen

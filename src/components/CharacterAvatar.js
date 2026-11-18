@@ -1,5 +1,8 @@
 import React, { useMemo } from 'react';
 import { SvgXml } from 'react-native-svg';
+import { catalog } from '../services/shopService';
+import { DEFAULT_EQUIPMENT, STARTER_EQUIPMENT } from '../services/avatarEquipment';
+import { getGarmentSvg } from './shopGarments';
 import {
   RACE_HUMAN_SVG,
   RACE_GOBLIN_SVG,
@@ -24,9 +27,7 @@ export const DEFAULT_AVATAR_CONFIG = {
   skinColor: '#D5896B',
   hair: 'hair1',
   eyes: 'eye1',
-  shirt: 'shirt1',
-  pants: 'leg1',
-  shoes: 'shoe1',
+  ...DEFAULT_EQUIPMENT,
   hairColor: '#1B0700',
   shirtColor: '#222123',
   pantsColor: '#272E59',
@@ -207,6 +208,9 @@ const INNER_HAIR6 = extractInnerSvg(HAIR6_SVG);
 const INNER_SHIRT1 = extractInnerSvg(SHIRT1_SVG);
 const INNER_LEG1 = extractInnerSvg(LEG1_SVG);
 const INNER_SHOE1 = extractInnerSvg(SHOE1_SVG);
+const equipmentLayers = new Map(
+  [...catalog, ...STARTER_EQUIPMENT].map((item) => [item.id, extractInnerSvg(getGarmentSvg(item))])
+);
 
 // Deslocamento horizontal exato entre o corpo do raceHuman (284w) e o raceGoblin (427w)
 const HUMAN_OFFSET_X = 70.824;
@@ -233,7 +237,7 @@ export default function CharacterAvatar({
       : INNER_SHOE1;
     const shoesLayer =
       merged.shoes !== 'none'
-        ? `<g transform="translate(${HUMAN_OFFSET_X + 60.56}, 439.46)">${shoesColored}</g>`
+        ? `<g transform="translate(${HUMAN_OFFSET_X + 60.56}, 439.46)">${equipmentLayers.get(merged.shoes) || shoesColored}</g>`
         : '';
 
     const pantsColored = merged.pantsColor
@@ -241,7 +245,7 @@ export default function CharacterAvatar({
       : INNER_LEG1;
     const pantsLayer =
       merged.pants !== 'none'
-        ? `<g transform="translate(${HUMAN_OFFSET_X + 64.13}, 322.9)">${pantsColored}</g>`
+        ? `<g transform="translate(${HUMAN_OFFSET_X + 64.13}, 322.9)">${equipmentLayers.get(merged.pants) || pantsColored}</g>`
         : '';
 
     const shirtColored = merged.shirtColor
@@ -249,7 +253,7 @@ export default function CharacterAvatar({
       : INNER_SHIRT1;
     const shirtLayer =
       merged.shirt !== 'none'
-        ? `<g transform="translate(${HUMAN_OFFSET_X + 72.65}, 229.27)">${shirtColored}</g>`
+        ? `<g transform="translate(${HUMAN_OFFSET_X + 72.65}, 229.27)">${equipmentLayers.get(merged.shirt) || shirtColored}</g>`
         : '';
 
     const eyesColored = isGoblin
@@ -290,6 +294,13 @@ export default function CharacterAvatar({
       hairLayer = `<g transform="translate(${HUMAN_OFFSET_X - 26.02}, -54.32)">${colorizeHair(INNER_HAIR1)}</g>`;
     }
 
+    const headArt = equipmentLayers.get(merged.head);
+    const headLayer = headArt ? `<g transform="translate(107, -91) scale(1.48)">${headArt}</g>` : '';
+    const weaponArt = equipmentLayers.get(merged.weapon);
+    const weaponLayer = weaponArt
+      ? `<g transform="translate(275, 341) rotate(28) scale(1.18) translate(-37, -113)">${weaponArt}</g>`
+      : '';
+
     // Quando cropToWaist=true (usado no banner da tela de Perfil), corta na altura da calça/bolsos igual ao print enviado
     const viewBox = cropToWaist ? '0 -115 427 483' : '0 -115 427 615';
 
@@ -301,6 +312,8 @@ export default function CharacterAvatar({
       ${pantsLayer}
       ${eyesLayer}
       ${hairLayer}
+      ${headLayer}
+      ${weaponLayer}
     </svg>`;
   }, [
     merged.race,
@@ -310,6 +323,8 @@ export default function CharacterAvatar({
     merged.shirt,
     merged.pants,
     merged.shoes,
+    merged.head,
+    merged.weapon,
     merged.hairColor,
     merged.shirtColor,
     merged.pantsColor,

@@ -12,6 +12,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import Navbar from '../components/Navbar';
 import { toast } from '../utils/toast';
@@ -505,29 +506,8 @@ export default function TasksScreen({
   const modalAutoPriority = getPriorityByDaysRemaining(modalDaysUntilDeadline);
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={[styles.mobileFrame, { width: containerWidth }]}>
-        {/* Cabeçalho Superior */}
-        <View style={styles.topHeader}>
-          <View>
-            <Text style={styles.screenTitle}>Tarefas</Text>
-            <Text style={styles.screenSubtitle}>
-              Organize suas missões no calendário
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.newTaskTopButton}
-            activeOpacity={0.85}
-            onPress={openCreateModal}
-            accessibilityRole="button"
-            accessibilityLabel="Criar nova tarefa"
-          >
-            <PlusIcon size={16} color="#FFFFFF" />
-            <Text style={styles.newTaskTopButtonText}>Nova tarefa</Text>
-          </TouchableOpacity>
-        </View>
-
         <ScrollView
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
@@ -779,6 +759,17 @@ export default function TasksScreen({
             </View>
           </View>
 
+          <TouchableOpacity
+            style={styles.newTaskButton}
+            activeOpacity={0.85}
+            onPress={openCreateModal}
+            accessibilityRole="button"
+            accessibilityLabel="Criar nova tarefa"
+          >
+            <PlusIcon size={16} color="#FFFFFF" />
+            <Text style={styles.newTaskButtonText}>Nova tarefa</Text>
+          </TouchableOpacity>
+
           {/* Cabeçalho da Lista de Tarefas do Dia Selecionado */}
           <View style={styles.daySectionHeader}>
             <View>
@@ -801,7 +792,7 @@ export default function TasksScreen({
                 Nenhuma tarefa para este dia
               </Text>
               <Text style={styles.emptyStateSubtitle}>
-                Toque em "Nova tarefa" para planejar suas atividades.
+                Use o botão Nova tarefa acima para planejar suas atividades.
               </Text>
               <TouchableOpacity
                 style={styles.emptyAddBtn}
@@ -1299,7 +1290,7 @@ export default function TasksScreen({
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1314,31 +1305,10 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.background,
   },
-  topHeader: {
-    width: '100%',
-    paddingTop: Platform.OS === 'ios' ? 50 : 24,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    backgroundColor: '#000C56',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  screenTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  screenSubtitle: {
-    fontSize: 12.5,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.78)',
-    marginTop: 2,
-  },
-  newTaskTopButton: {
+  newTaskButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1348,7 +1318,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 16,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none', cursor: 'pointer' } : {}),
   },
-  newTaskTopButtonText: {
+  newTaskButtonText: {
     color: '#FFFFFF',
     fontSize: 13.5,
     fontWeight: '800',

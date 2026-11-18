@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const { test } = require('node:test');
 const { transformSync } = require('@babel/core');
 
-function setup(granted = true) {
+function setup(granted = true, { platform = 'android', iosStatus } = {}) {
   const channels = [];
   const scheduled = [];
   const canceled = [];
@@ -14,7 +14,11 @@ function setup(granted = true) {
     IosAuthorizationStatus: { PROVISIONAL: 3 },
     SchedulableTriggerInputTypes: { DATE: 'date' },
     setNotificationHandler: (value) => { handler = value; },
-    getPermissionsAsync: async () => ({ granted, canAskAgain: false }),
+    getPermissionsAsync: async () => ({
+      granted,
+      canAskAgain: false,
+      ...(iosStatus === undefined ? {} : { ios: { status: iosStatus } }),
+    }),
     setNotificationChannelAsync: async (id, value) => channels.push({ id, ...value }),
     scheduleNotificationAsync: async (value) => { scheduled.push(value); return value.identifier; },
     cancelScheduledNotificationAsync: async (id) => canceled.push(id),
@@ -33,7 +37,7 @@ function setup(granted = true) {
   vm.runInNewContext(compiled, {
     exports,
     require: (name) => {
-      if (name === 'react-native') return { Platform: { OS: 'android' } };
+      if (name === 'react-native') return { Platform: { OS: platform } };
       if (name === 'expo-notifications') return notifications;
       if (name === 'expo-haptics') return {};
       throw new Error(`Unexpected dependency: ${name}`);
@@ -66,4 +70,18 @@ test('permissão negada não agenda alertas; sair cancela somente alertas de foc
   assert.equal(scheduled.length, 0);
   await service.cancelAllFocusAlerts();
   assert.deepEqual(canceled, ['focus-alert']);
+});
+
+test('iOS agenda alertas com autorização completa ou provisória sem criar canais Android', async () => {
+  for (const granted of [true, false]) {
+    const { service, channels, scheduled } = setup(granted, { platform: 'ios', iosStatus: granted ? 2 : 3 });
+    const preferences = { focusNotifications: true, soundEnabled: true, vibrationEnabled: true };
+    const deadline = Date.now() + 300000;
+    assert.equal(await service.requestFocusPermission(preferences), true);
+    await service.scheduleFocusAlert(deadline, preferences);
+    assert.equal(channels.length, 0);
+    assert.equal(scheduled.length, 1);
+    assert.equal(scheduled[0].trigger.date.getTime(), deadline);
+    assert.equal(scheduled[0].content.sound, 'default');
+  }
 });

@@ -19,13 +19,16 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-image",
+      "expo-secure-store"
     ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",
     "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "br.com.everquest.app",
       "supportsTablet": true
     },
     "android": {

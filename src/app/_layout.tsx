@@ -36,7 +36,7 @@ function Navigation() {
   }, [setFriendInvite]);
   const lightStatus = preferences.theme === 'dark' || isFocusing ||
     ['/login', '/onboarding', '/character', '/settings'].includes(pathname) ||
-    (pathname === '/' && ['profile', 'tasks'].includes(String(tab)));
+    (pathname === '/' && (tab === 'profile' || tab === 'shop'));
   return (
     <>
       <StatusBar style={lightStatus ? 'light' : 'dark'} />

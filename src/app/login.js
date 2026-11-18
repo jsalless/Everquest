@@ -1,10 +1,11 @@
 import React from 'react';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import LoginScreen from '../screens/LoginScreen';
 import { useSession } from '../contexts/SessionContext';
 
 export default function LoginRoute() {
-  const { setSession, setAvatarConfig, setIsFocusing } = useSession();
+  const { session, setSession, setAvatarConfig, setIsFocusing } = useSession();
+  if (session) return <Redirect href="/" />;
   return (
     <LoginScreen
       onRegister={() => router.push('/register')}

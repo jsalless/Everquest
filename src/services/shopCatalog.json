@@ -1,0 +1,8 @@
+[
+  { "id": "shirt-astral", "slot": "shirt", "name": "Túnica Astral", "collection": "Noites Arcanas", "price": 25, "color": "#5143AC", "accent": "#D8C2FF", "featured": true, "stats": { "magic": 5 } },
+  { "id": "pants-guardian", "slot": "pants", "name": "Calça da Guarda", "collection": "Guarda Real", "price": 20, "color": "#344B6C", "accent": "#F9D58C", "featured": true, "stats": { "armor": 4 } },
+  { "id": "shoes-ember", "slot": "shoes", "name": "Botas de Brasa", "collection": "Trilha de Fogo", "price": 15, "color": "#783533", "accent": "#FFA477", "stats": { "damage": 2 } },
+  { "id": "shirt-forest", "slot": "shirt", "name": "Túnica Silvestre", "collection": "Bosque Antigo", "price": 18, "color": "#24584B", "accent": "#9FE7B1", "stats": { "health": 10 } },
+  { "id": "pants-dusk", "slot": "pants", "name": "Calça do Crepúsculo", "collection": "Noites Arcanas", "price": 16, "color": "#483B68", "accent": "#E8A7EE", "stats": { "armor": 2, "magic": 2 } },
+  { "id": "shoes-frost", "slot": "shoes", "name": "Botas de Geada", "collection": "Picos Gelados", "price": 15, "color": "#315570", "accent": "#9DE7F8", "stats": { "armor": 2 } }
+]

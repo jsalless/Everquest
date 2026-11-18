@@ -1,3 +1,6 @@
+import * as sessionStorage from './sessionStorage';
+import { toast } from '../utils/toast';
+
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 const SUPABASE_SECRET_KEY = process.env.EXPO_PUBLIC_SUPABASE_SECRET_KEY || '';
@@ -5,6 +8,7 @@ const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').rep
 
 let memorySession = null;
 let memoryUsers = [];
+const SESSION_KEY = 'everquest_session';
 
 function getLocalUsers() {
   try {
@@ -50,36 +54,55 @@ function buildLocalSession({ email, username }) {
   };
 }
 
-export function saveSession(sessionData) {
-  memorySession = sessionData;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('everquest_session', JSON.stringify(sessionData));
-    }
-  } catch (_) { }
+function normalizeSession(data) {
+  const { user, access_token, refresh_token, shop_token, needsOnboarding } = data ?? {};
+  if (typeof user?.id !== 'string' || !user.id.trim()) {
+    throw new Error('A sessão não contém uma conta válida.');
+  }
+  const { id, email, username, avatarConfig, user_metadata } = user;
+  return {
+    user: {
+      id, email, username, avatarConfig,
+      user_metadata: {
+        username: user_metadata?.username,
+        display_name: user_metadata?.display_name,
+      },
+    },
+    access_token,
+    refresh_token,
+    shop_token,
+    ...(needsOnboarding === true ? { needsOnboarding: true } : {}),
+  };
 }
 
-export function getSession() {
+export async function saveSession(sessionData) {
+  const session = normalizeSession(sessionData);
+  memorySession = session;
+  try {
+    await sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    toast.warn('Não foi possível lembrar seu login neste dispositivo. A sessão continua aberta por enquanto.');
+  }
+  return session;
+}
+
+export async function restoreSession() {
   if (memorySession) return memorySession;
+  const raw = await sessionStorage.getItem(SESSION_KEY);
+  if (raw === null) return null;
   try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem('everquest_session');
-      if (raw) {
-        memorySession = JSON.parse(raw);
-        return memorySession;
-      }
-    }
-  } catch (_) { }
-  return null;
+    memorySession = normalizeSession(JSON.parse(raw));
+    return memorySession;
+  } catch {
+    await clearSession();
+    throw new Error('O login salvo estava inválido e foi removido.');
+  }
 }
 
-export function clearSession() {
+export async function clearSession() {
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('everquest_session');
-    }
-  } catch (error) {
-    console.error('Falha ao encerrar a sessão salva:', error);
+    await sessionStorage.removeItem(SESSION_KEY);
+  } catch {
     throw new Error('Não foi possível remover a sessão deste aparelho. Tente novamente.');
   }
   memorySession = null;
@@ -104,7 +127,7 @@ function translateError(msg = '') {
 }
 
 async function updateAccountEndpoint(path, payload) {
-  const session = getSession();
+  const session = memorySession;
   if (!session?.access_token) {
     throw new Error('Entre novamente para alterar sua conta.');
   }
@@ -128,9 +151,12 @@ async function updateAccountEndpoint(path, payload) {
   if (!data.user?.id || data.user.id !== session.user?.id) {
     throw new Error('O servidor retornou uma conta inválida. Entre novamente.');
   }
-  const updated = { ...session, user: { ...session.user, ...data.user } };
-  saveSession(updated);
-  return updated;
+  const updated = {
+    ...session,
+    ...(data.shop_token ? { shop_token: data.shop_token } : {}),
+    user: { ...session.user, ...data.user },
+  };
+  return saveSession(updated);
 }
 
 export function updateAccount({ username, email, currentPassword }) {
@@ -167,8 +193,7 @@ export async function registerUser({ username, email, password }) {
     if (!res.ok) {
       throw new Error(translateError(data.detail || 'Erro ao criar conta'));
     }
-    saveSession(data);
-    return data;
+    return saveSession({ ...data, needsOnboarding: true });
   } catch (err) {
     if (!isNetworkOrParseError(err)) {
       throw err;
@@ -219,8 +244,7 @@ export async function registerUser({ username, email, password }) {
           refresh_token: loginData.refresh_token,
           user: loginData.user || createData,
         };
-        saveSession(sessionPayload);
-        return sessionPayload;
+        return saveSession({ ...sessionPayload, needsOnboarding: true });
       } catch (supaErr) {
         if (!isNetworkOrParseError(supaErr)) {
           throw supaErr;
@@ -243,8 +267,7 @@ export async function registerUser({ username, email, password }) {
     saveLocalUsers(users);
 
     const localSession = buildLocalSession({ email: normalizedEmail, username });
-    saveSession(localSession);
-    return localSession;
+    return saveSession({ ...localSession, needsOnboarding: true });
   }
 }
 
@@ -261,8 +284,7 @@ export async function loginUser({ email, password }) {
         translateError(data.detail || 'E-mail ou senha inválidos')
       );
     }
-    saveSession(data);
-    return data;
+    return saveSession(data);
   } catch (err) {
     if (!isNetworkOrParseError(err)) {
       throw err;
@@ -290,8 +312,7 @@ export async function loginUser({ email, password }) {
             'E-mail ou senha inválidos';
           throw new Error(translateError(raw));
         }
-        saveSession(data);
-        return data;
+        return saveSession(data);
       } catch (supaErr) {
         if (!isNetworkOrParseError(supaErr)) {
           throw supaErr;
@@ -311,7 +332,6 @@ export async function loginUser({ email, password }) {
       email: normalizedEmail,
       username: foundUser?.username,
     });
-    saveSession(localSession);
-    return localSession;
+    return saveSession(localSession);
   }
 }
