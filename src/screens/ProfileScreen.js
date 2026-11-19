@@ -194,6 +194,7 @@ export default function ProfileScreen({
   user,
   serverManaged = false,
   friendToken,
+  focusStatsVersion = 0,
   avatarConfig,
   activeTab = 'profile',
   onChangeTab,
@@ -328,7 +329,7 @@ export default function ProfileScreen({
     return () => {
       isMounted = false;
     };
-  }, [user, avatarConfig, serverManaged, friendToken]);
+  }, [user, avatarConfig, serverManaged, friendToken, focusStatsVersion]);
 
   useEffect(() => {
     if (!isAddFriendModalVisible) return;

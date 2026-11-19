@@ -54,11 +54,13 @@ quem convidou pode pausar, retomar ou encerrar. A tela informa quando perde
 conexão e atualiza o relógio ao reconectar.
 
 Antes de disponibilizar o recurso, aplique `backend/sql/05_focus_sessions.sql`
-em um banco de teste, gere o cliente Prisma (`npx prisma generate`) e atualize
-o servidor e o aplicativo juntos. Depois de validar, aplique o SQL no banco
-apropriado. Configure `SHOP_SESSION_SECRET` como segredo estável no servidor e
-use um endereço `EXPO_PUBLIC_API_URL` acessível pelos aparelhos. Não inclua
-segredos em variáveis `EXPO_PUBLIC_`.
+e depois `backend/sql/06_focus_statistics.sql` em um banco de teste, gere o
+cliente Prisma (`npx prisma generate`) e atualize o servidor e o aplicativo
+juntos. Depois de validar, aplique os scripts no banco apropriado. O primeiro
+script revoga o acesso direto às amizades e pode interromper clientes antigos.
+Configure `SHOP_SESSION_SECRET` como segredo estável no servidor e use um
+endereço `EXPO_PUBLIC_API_URL` acessível pelos aparelhos. Não inclua segredos
+em variáveis `EXPO_PUBLIC_`.
 
 Para avisos com o aplicativo fechado, configure as credenciais de push do
 Firebase e/ou Apple no EAS e crie uma nova build de desenvolvimento ou
@@ -71,7 +73,9 @@ são acompanhados por comprovantes do Expo; falhas de entrega são registradas
 no servidor. Valide o fluxo em dois aparelhos e duas contas reais antes da
 publicação.
 
-Se a sessão terminar enquanto o aplicativo estiver fechado, o registro local
-de estatísticas e o progresso da missão diária podem não ser atualizados ao
-reabrir. As estatísticas existentes também não persistem entre reinícios no
-aplicativo nativo.
+As estatísticas individuais são salvas no aparelho. Sessões compartilhadas
+concluídas são recuperadas do servidor ao abrir o app e ao voltar às telas;
+cada participante recebe o crédito de missão uma única vez. O histórico
+compartilhado também tem um cache por conta para consulta no aparelho. Na
+recuperação, a data considera o fuso horário do aparelho. É necessário acesso
+ao servidor para recuperar novas sessões e contabilizá-las nas missões.

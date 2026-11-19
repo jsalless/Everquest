@@ -6,6 +6,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ShopScreen from './src/screens/ShopScreen';
 import StoryScreen from './src/screens/StoryScreen';
 import { useSession } from './src/contexts/SessionContext';
+import useSharedFocusStatistics from './src/hooks/useSharedFocusStatistics';
 
 export default function App() {
   const { tab } = useLocalSearchParams();
@@ -13,6 +14,8 @@ export default function App() {
   const {
     session, avatarConfig, friendInvite, setFriendInvite, setIsFocusing,
   } = useSession();
+  const user = session?.user || session;
+  const sharedStats = useSharedFocusStatistics(session?.shop_token, user?.id, activeTab);
   useEffect(() => {
     if (session && !session.needsOnboarding && friendInvite && activeTab !== 'profile') {
       router.replace({ pathname: '/', params: { tab: 'profile' } });
@@ -22,7 +25,6 @@ export default function App() {
   if (!session) return <Redirect href="/login" />;
   if (session.needsOnboarding) return <Redirect href="/onboarding" />;
   const onChangeTab = (nextTab) => router.replace({ pathname: '/', params: { tab: nextTab } });
-  const user = session.user || session;
   if (activeTab === 'map') {
     return <StoryScreen key={user.id} userId={user.id} onChangeTab={onChangeTab} />;
   }
@@ -33,6 +35,7 @@ export default function App() {
         user={user}
         serverManaged={!!session.shop_token}
         friendToken={session.shop_token}
+        focusStatsVersion={sharedStats.version}
         avatarConfig={avatarConfig}
         friendInvite={friendInvite}
         onConsumeFriendInvite={() => setFriendInvite(null)}
@@ -61,6 +64,8 @@ export default function App() {
       key={`${user.id}:${session.shop_token || ''}`}
       user={user}
       focusToken={session.shop_token}
+      sharedFocusStats={sharedStats.stats}
+      onSharedCompleted={sharedStats.refresh}
       activeTab={activeTab}
       onChangeTab={onChangeTab}
       onFocusStateChange={setIsFocusing}

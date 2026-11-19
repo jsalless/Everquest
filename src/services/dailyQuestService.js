@@ -1,4 +1,5 @@
 import { loadSavedTasks } from './taskService';
+import { getFocusStatsSnapshot } from './focusStatistics';
 
 const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
@@ -22,30 +23,9 @@ function getSupabaseHeaders(extra = {}) {
   };
 }
 
-async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats) {
+async function syncQuestsToSupabase(userKey, todayKey, quests) {
   if (!SUPABASE_URL || !SUPABASE_API_KEY) return;
   try {
-    if (stats) {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/daily_activity_counters?on_conflict=user_id,activity_date`,
-        {
-          method: 'POST',
-          headers: getSupabaseHeaders({
-            Prefer: 'resolution=merge-duplicates,return=minimal',
-          }),
-          body: JSON.stringify({
-            user_id: userKey,
-            activity_date: todayKey,
-            focus_sessions: stats.focusSessionsToday || 0,
-            focus_seconds: stats.focusSecondsToday || 0,
-            tasks_completed: stats.tasksCompletedToday || 0,
-            tasks_created: stats.tasksCreatedToday || 0,
-          }),
-        }
-      );
-      if (!response.ok) throw new Error(`Contadores: HTTP ${response.status}`);
-    }
-
     if (Array.isArray(quests) && quests.length > 0) {
       const payload = quests.map((q) => ({
         user_id: userKey,
@@ -81,7 +61,6 @@ async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats)
 
 const REWARDS_STORAGE_KEY = 'everquest_user_rewards_v1';
 const DAILY_QUESTS_STORAGE_KEY = 'everquest_daily_quests_v1';
-const FOCUS_DAILY_STATS_KEY = 'everquest_focus_daily_stats_v1';
 
 export const XP_PER_LEVEL = 100;
 
@@ -308,23 +287,15 @@ export function getTodayActivityStats(todayKey = getTodayKey()) {
   let tasksCompletedToday = 0;
   let tasksCreatedToday = 0;
 
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const rawFocusStats = localStorage.getItem(FOCUS_DAILY_STATS_KEY);
-      if (rawFocusStats) {
-        const parsedStats = JSON.parse(rawFocusStats);
-        const dayEntry = parsedStats?.[todayKey];
-        if (dayEntry && typeof dayEntry === 'object') {
-          focusSessionsToday = Math.max(
-            0,
-            Number(dayEntry.sessionsCount) ||
-              (Array.isArray(dayEntry.sessions) ? dayEntry.sessions.length : 0)
-          );
-          focusSecondsToday = Math.max(0, Number(dayEntry.totalSeconds) || 0);
-        }
-      }
-    }
-  } catch (_) {}
+  const dayEntry = getFocusStatsSnapshot()[todayKey];
+  if (dayEntry && typeof dayEntry === 'object') {
+    focusSessionsToday = Math.max(
+      0,
+      Number(dayEntry.sessionsCount) ||
+        (Array.isArray(dayEntry.sessions) ? dayEntry.sessions.length : 0)
+    );
+    focusSecondsToday = Math.max(0, Number(dayEntry.totalSeconds) || 0);
+  }
 
   loadSavedTasks().forEach((task) => {
     if (task?.completed && task?.completedAtDate === todayKey) {
@@ -636,11 +607,10 @@ export async function fetchUserProgressionAndQuests(user) {
         }
       }
 
-      await syncQuestsAndCountersToSupabase(
+      await syncQuestsToSupabase(
         userKey,
         todayKey,
-        mergedQuests,
-        stats
+        mergedQuests
       );
 
       return {
@@ -726,7 +696,7 @@ export async function syncDailyActivityProgress(user, eventOptions = {}) {
     (q) => q.completed && !wasCompletedByTier[q.tier]
   );
 
-  await syncQuestsAndCountersToSupabase(userKey, todayKey, afterLocal, stats);
+  await syncQuestsToSupabase(userKey, todayKey, afterLocal);
 
   return {
     dailyQuests: afterLocal,
@@ -856,11 +826,10 @@ export async function claimDailyQuestReward(user, tierKey, { serverManaged = fal
     if (SUPABASE_URL && SUPABASE_API_KEY) {
       try {
         const [, profileResponse] = await Promise.all([
-          syncQuestsAndCountersToSupabase(
+          syncQuestsToSupabase(
             userKey,
             todayKey,
-            updatedQuests,
-            getTodayActivityStats(todayKey)
+            updatedQuests
           ),
           fetch(
             `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(

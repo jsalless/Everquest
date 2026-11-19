@@ -43,7 +43,10 @@ function transition(session, userId, action, now = Date.now()) {
     return { status: 'running', running_since: new Date(now) };
   }
   if (action === 'stop' && isHost && (status === 'running' || status === 'paused')) {
-    return { status: 'completed', elapsed_ms: elapsedMilliseconds(session, now), running_since: null };
+    return {
+      status: 'completed', elapsed_ms: elapsedMilliseconds(session, now),
+      running_since: null, completed_at: new Date(now),
+    };
   }
   return null;
 }

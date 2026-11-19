@@ -23,13 +23,13 @@ import { toast } from '../utils/toast';
 import { syncDailyActivityProgress } from '../services/dailyQuestService';
 import useFocusClock from '../hooks/useFocusClock';
 import useSharedFocus from '../hooks/useSharedFocus';
+import { getFocusStatsSnapshot, loadFocusStats, mergeFocusStats, recordSoloFocus } from '../services/focusStatistics';
 
 const goblinFocoImage = require('../../assets/GoblinFoco.png');
 
 // Passos da régua: índice 0 = Cronômetro (0 min), índices 1..24 = 5 min até 120 min (de 5 em 5 min)
 const MAX_STEP_INDEX = 24;
 const TICK_SPACING = 22;
-const STATS_STORAGE_KEY = 'everquest_focus_daily_stats_v1';
 const WEEKDAY_LOWER = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.'];
 const MONTH_ABBR_LOWER = [
   'jan.',
@@ -66,8 +66,6 @@ const STATS_PERIOD_OPTIONS = [
   { id: 'monthly', label: 'Mês' },
   { id: 'annual', label: 'Ano' },
 ];
-
-let memoryDailyStats = {};
 
 function getDateKey(dateObj = new Date()) {
   const yyyy = dateObj.getFullYear();
@@ -444,29 +442,6 @@ function buildPeriodViewData(period, dailyStats, periodOffset = 0) {
   };
 }
 
-function loadDailyStats() {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(STATS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        memoryDailyStats = parsed;
-        return parsed;
-      }
-    }
-  } catch (_) { }
-  return memoryDailyStats;
-}
-
-function saveDailyStats(nextStats) {
-  memoryDailyStats = nextStats;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(nextStats));
-    }
-  } catch (_) { }
-}
-
 function formatDurationHuman(totalSeconds) {
   if (!totalSeconds || totalSeconds <= 0) return '0m 00s';
   const hours = Math.floor(totalSeconds / 3600);
@@ -537,6 +512,8 @@ function StatsBarChartIcon({ size = 22, color = '#000C56' }) {
 export default function FocusScreen({
   user,
   focusToken,
+  sharedFocusStats = {},
+  onSharedCompleted,
   activeTab = 'focus',
   onChangeTab,
   onFocusStateChange,
@@ -555,7 +532,7 @@ export default function FocusScreen({
   const [focoTotal, setFocoTotal] = useState(false);
 
   // Estado das estatísticas de foco (Dia, Semana, Mês e Ano)
-  const [dailyStats, setDailyStats] = useState(() => loadDailyStats());
+  const [dailyStats, setDailyStats] = useState(() => getFocusStatsSnapshot());
   const [isStatsModalVisible, setIsStatsModalVisible] = useState(false);
   const [statsPeriod, setStatsPeriod] = useState('daily');
   const [periodOffset, setPeriodOffset] = useState(0);
@@ -578,63 +555,46 @@ export default function FocusScreen({
   const selectedMinutes = stepIndex * 5;
   const isTimerMode = stepIndex > 0;
 
+  useEffect(() => {
+    let active = true;
+    loadFocusStats().then((stats) => {
+      if (active) setDailyStats(stats);
+    }).catch((error) => {
+      console.error('Não foi possível carregar as estatísticas de foco:', error.message);
+      if (active) toast.error('Não foi possível carregar as estatísticas de foco.');
+    });
+    return () => { active = false; };
+  }, []);
+
   // Registra uma sessão concluída nas estatísticas do dia atual
   const recordFocusSession = (focusedSeconds, modeLabel) => {
     if (!focusedSeconds || focusedSeconds <= 0) return;
 
-    const now = new Date();
-    const todayKey = getDateKey(now);
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-
-    const currentStats = loadDailyStats();
-    const dayEntry = currentStats[todayKey] || {
-      totalSeconds: 0,
-      sessionsCount: 0,
-      sessions: [],
-    };
-
-    const newSession = {
-      id: `${Date.now()}`,
-      time: `${hh}:${mm}`,
-      durationSeconds: focusedSeconds,
-      mode: modeLabel,
-      focoTotal,
-    };
-
-    const updatedStats = {
-      ...currentStats,
-      [todayKey]: {
-        totalSeconds: dayEntry.totalSeconds + focusedSeconds,
-        sessionsCount: dayEntry.sessionsCount + 1,
-        sessions: [newSession, ...(dayEntry.sessions || [])].slice(0, 30),
-      },
-    };
-
-    saveDailyStats(updatedStats);
-    setDailyStats(updatedStats);
-    setSelectedBucketKey(null);
-
-    syncDailyActivityProgress(user, {
-      eventType: 'focus_session_completed',
-      focusSessionsDelta: 1,
-      focusSecondsDelta: focusedSeconds,
+    recordSoloFocus(focusedSeconds, modeLabel, focoTotal).then((updatedStats) => {
+      setDailyStats(updatedStats);
+      setSelectedBucketKey(null);
+      return syncDailyActivityProgress(user, {
+        eventType: 'focus_session_completed',
+        focusSessionsDelta: 1,
+        focusSecondsDelta: focusedSeconds,
+      });
     }).then((res) => {
       if (res?.newlyCompleted?.length > 0) {
         toast.info(
           `Daily Quest concluída: "${res.newlyCompleted[0].title}"! Resgate sua recompensa no Perfil.`
         );
       }
+    }).catch((error) => {
+      console.error('Não foi possível registrar a sessão de foco:', error.message);
+      setDailyStats(getFocusStatsSnapshot());
+      toast.error('Não foi possível registrar a sessão de foco.');
     });
   };
 
   const finishSharedSession = (session) => {
     setIsInviteVisible(false);
     if (session.status === 'completed') {
-      const focusedSeconds = Math.floor(session.elapsedMs / 1000);
-      if (focusedSeconds > 0 && wasSharedActive.current) {
-        recordFocusSession(focusedSeconds, session.durationSeconds ? 'Temporizador' : 'Cronômetro');
-      }
+      onSharedCompleted?.();
       if (wasSharedActive.current) {
         toast.success('Sessão de foco com amigo finalizada.');
       } else {
@@ -725,7 +685,7 @@ export default function FocusScreen({
 
   const openStatsModal = () => {
     if (isFocusing) return;
-    const freshStats = loadDailyStats();
+    const freshStats = getFocusStatsSnapshot();
     setDailyStats(freshStats);
     setPeriodOffset(0);
     setSelectedBucketKey(null);
@@ -981,7 +941,7 @@ export default function FocusScreen({
   const rulerCenterX = rulerWidth / 2;
 
   // Dados do período selecionado (Dia, Semana, Mês ou Ano) para o modal de estatísticas
-  const periodView = buildPeriodViewData(statsPeriod, dailyStats, periodOffset);
+  const periodView = buildPeriodViewData(statsPeriod, mergeFocusStats(dailyStats, sharedFocusStats), periodOffset);
   const activeBucket = selectedBucketKey
     ? periodView.buckets.find((b) => b.key === selectedBucketKey) || null
     : null;

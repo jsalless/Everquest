@@ -29,6 +29,7 @@ model Profile {
   focusInvitesSent     FocusSession[]         @relation("FocusHost")
   focusInvitesReceived FocusSession[]         @relation("FocusGuest")
   pushDevices          PushDevice[]
+  focusCredits         FocusSessionCredit[]
 
   @@index([username])
   @@index([character_name])
@@ -46,13 +47,27 @@ model FocusSession {
   created_at       DateTime  @default(now()) @db.Timestamptz(6)
   updated_at       DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
   expires_at       DateTime  @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
 
   host  Profile @relation("FocusHost", fields: [host_id], references: [id], onDelete: Cascade)
   guest Profile @relation("FocusGuest", fields: [guest_id], references: [id], onDelete: Cascade)
+  credits FocusSessionCredit[]
 
   @@index([host_id, status])
   @@index([guest_id, status])
   @@map("focus_sessions")
+}
+
+model FocusSessionCredit {
+  session_id String @db.Uuid
+  user_id    String
+  date_key   String
+  timezone_offset_minutes Int
+  session    FocusSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user       Profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([session_id, user_id])
+  @@map("focus_session_credits")
 }
 
 model PushDevice {

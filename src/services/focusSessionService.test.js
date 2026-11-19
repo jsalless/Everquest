@@ -48,3 +48,17 @@ test('respostas sem sessão e indisponibilidade não são apresentadas como suce
     throw new Error('offline');
   }).fetchFocusSession('token'), /conectar ao servidor/);
 });
+
+test('histórico exige resposta válida e crédito envia a sessão autenticada', async () => {
+  const invalid = service(async () => ({ ok: true, json: async () => ({ sessions: [{}], nextCursor: null }) }));
+  await assert.rejects(invalid.fetchFocusHistory('token'), /inválida/);
+  let request;
+  const api = service(async (url, options) => {
+    request = { url, options };
+    return { ok: true, json: async () => ({ credited: true, dateKey: '2026-11-19', offsetMinutes: 180 }) };
+  });
+  await api.creditFocusSession('token', 'session-id', 180);
+  assert.match(request.url, /session-id\/credit$/);
+  assert.equal(request.options.headers.Authorization, 'Bearer token');
+  assert.equal(JSON.parse(request.options.body).offsetMinutes, 180);
+});

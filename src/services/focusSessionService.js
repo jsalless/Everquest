@@ -78,6 +78,36 @@ export async function updateFocusSession(token, sessionId, action) {
   return result;
 }
 
+export async function fetchFocusHistory(token, cursor, signal) {
+  const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  const data = await request(token, `/focus-sessions/history${suffix}`, 'GET', undefined, signal);
+  if (!Array.isArray(data.sessions) || (data.nextCursor !== null && typeof data.nextCursor !== 'string')) {
+    throw new Error('O servidor retornou um histórico de foco inválido.');
+  }
+  for (const session of data.sessions) {
+    if (typeof session.id !== 'string' || session.status !== 'completed' ||
+        typeof session.credited !== 'boolean' || !Number.isFinite(session.elapsedMs) ||
+        session.elapsedMs < 0 || !Number.isFinite(session.durationSeconds) || session.durationSeconds < 0 ||
+        (session.credited && (typeof session.creditedDate !== 'string' ||
+          !Number.isInteger(session.creditedOffset) || session.creditedOffset < -840 || session.creditedOffset > 720)) ||
+        !session.completedAt || !Number.isFinite(new Date(session.completedAt).getTime())) {
+      throw new Error('O servidor retornou uma sessão concluída inválida.');
+    }
+  }
+  return data;
+}
+
+export async function creditFocusSession(token, sessionId, offsetMinutes, signal) {
+  const data = await request(token, `/focus-sessions/${encodeURIComponent(sessionId)}/credit`,
+    'POST', { offsetMinutes }, signal);
+  if (typeof data.credited !== 'boolean' || (data.credited &&
+      (typeof data.dateKey !== 'string' || !Number.isInteger(data.offsetMinutes) ||
+       data.offsetMinutes < -840 || data.offsetMinutes > 720))) {
+    throw new Error('O servidor não confirmou a sessão de foco.');
+  }
+  return data;
+}
+
 export async function registerFocusDevice(token, deviceToken) {
   const result = await request(token, '/focus-push-device', 'POST', { token: deviceToken });
   if (result.ok !== true) throw new Error('O servidor não confirmou o registro das notificações.');

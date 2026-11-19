@@ -57,6 +57,6 @@ test('somente o anfitrião pode encerrar uma sessão em andamento', () => {
   const running = { ...pending, ...transition(pending, 'guest', 'accept', now) };
   assert.equal(transition(running, 'guest', 'stop', now + 10000), null);
   assert.deepEqual(transition(running, 'host', 'stop', now + 10000), {
-    status: 'completed', elapsed_ms: 10000, running_since: null,
+    status: 'completed', elapsed_ms: 10000, running_since: null, completed_at: new Date(now + 10000),
   });
 });

@@ -5,11 +5,15 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { createFocusSession, getFocusSession, changeFocusSession } = require('./focusSessions');
+const {
+  createFocusSession, getFocusSession, changeFocusSession, getFocusHistory, creditFocusSession,
+} = require('./focusSessions');
 const { issueShopToken } = require('./shop');
 
 function database() {
   const rows = [];
+  const credits = [];
+  const counters = new Map();
   const profiles = {
     alice: { character_name: 'Alice' },
     bob: { character_name: 'Bob' },
@@ -31,25 +35,62 @@ function database() {
       }, where) ? { id: 'friendship' } : null,
     },
     focusSession: {
-      findMany: async ({ where }) => rows.filter((row) => matches(row, where)),
+      findMany: async ({ where, include, cursor, skip, take }) => {
+        let result = rows.filter((row) => matches(row, where));
+        if (include?.credits) {
+          result = result.sort((a, b) => a.id.localeCompare(b.id));
+          if (cursor) result = result.slice(result.findIndex((row) => row.id === cursor.id) + skip);
+          if (take) result = result.slice(0, take);
+          result = result.map((row) => ({
+            ...includeNames(row, include),
+            credits: credits.filter((credit) =>
+              credit.session_id === row.id && credit.user_id === include.credits.where.user_id),
+          }));
+        }
+        return result;
+      },
       findFirst: async ({ where, include }) => includeNames(rows.find((row) => matches(row, where)), include),
       findUnique: async ({ where, include }) => includeNames(rows.find((row) => row.id === where.id), include),
       create: async ({ data, include }) => {
         const row = {
           ...data, id: randomUUID(), status: 'pending', elapsed_ms: 0,
-          running_since: null, created_at: new Date(),
+          running_since: null, created_at: new Date(), updated_at: new Date(),
         };
         rows.push(row);
         return includeNames(row, include);
       },
       update: async ({ where, data, include }) => {
         const row = rows.find((item) => item.id === where.id);
-        Object.assign(row, data);
+        Object.assign(row, data, { updated_at: new Date() });
         return includeNames(row, include);
       },
     },
+    focusSessionCredit: {
+      findUnique: async ({ where }) => credits.find((credit) =>
+        credit.session_id === where.session_id_user_id.session_id &&
+        credit.user_id === where.session_id_user_id.user_id),
+      createMany: async ({ data }) => {
+        const credit = data[0];
+        if (credits.some((item) => item.session_id === credit.session_id && item.user_id === credit.user_id)) {
+          return { count: 0 };
+        }
+        credits.push(credit);
+        return { count: 1 };
+      },
+    },
+    dailyActivityCounter: {
+      upsert: async ({ where, create, update }) => {
+        const key = `${where.user_id_activity_date.user_id}:${where.user_id_activity_date.activity_date}`;
+        const current = counters.get(key);
+        counters.set(key, current ? {
+          ...current,
+          focus_sessions: current.focus_sessions + update.focus_sessions.increment,
+          focus_seconds: current.focus_seconds + update.focus_seconds.increment,
+        } : create);
+      },
+    },
   };
-  return { db, rows };
+  return { db, rows, counters };
 }
 
 test('convites exigem amizade e duração válida e bloqueiam sessões simultâneas', async () => {
@@ -83,6 +124,31 @@ test('convites vencidos liberam os participantes e não podem ser aceitos', asyn
   assert.equal((await changeFocusSession(db, 'bob', session.id, 'accept')).status, 409);
   assert.equal((await getFocusSession(db, 'bob', session.id)).status, 'expired');
   assert.equal((await createFocusSession(db, 'alice', { friendId: 'bob', durationSeconds: 0 })).status, 201);
+});
+
+test('recupera conclusão enquanto o app estava fechado e credita uma vez por participante', async () => {
+  const { db, rows, counters } = database();
+  const { session } = await createFocusSession(db, 'alice', { friendId: 'bob', durationSeconds: 300 });
+  await changeFocusSession(db, 'bob', session.id, 'accept');
+  const endedAt = Date.now() - 60000;
+  rows[0].running_since = new Date(endedAt - 300000);
+  const history = await getFocusHistory(db, 'bob');
+  assert.equal(history.sessions.length, 1);
+  assert.equal(history.sessions[0].credited, false);
+  assert.ok(Math.abs(new Date(history.sessions[0].completedAt).getTime() - endedAt) < 100);
+  assert.equal((await getFocusHistory(db, 'other')).sessions.length, 0);
+  const day = new Date(endedAt).toISOString().slice(0, 10);
+  assert.equal((await creditFocusSession(db, 'other', session.id, 0)).status, 404);
+  assert.equal((await creditFocusSession(db, 'bob', session.id, 900)).status, 400);
+  assert.equal((await creditFocusSession(db, 'bob', session.id, 0)).credited, true);
+  const repeated = await creditFocusSession(db, 'bob', session.id, 180);
+  assert.equal(repeated.offsetMinutes, 0);
+  assert.equal(repeated.dateKey, day);
+  await creditFocusSession(db, 'alice', session.id, 0);
+  assert.equal(counters.get(`bob:${day}`).focus_sessions, 1);
+  assert.equal(counters.get(`bob:${day}`).focus_seconds, 300);
+  assert.equal(counters.get(`alice:${day}`).focus_sessions, 1);
+  assert.equal((await getFocusHistory(db, 'bob')).sessions[0].credited, true);
 });
 
 test('rotas de foco exigem sessão assinada e não expõem sessões a terceiros', async () => {
@@ -123,4 +189,12 @@ test('rotas de foco exigem sessão assinada e não expõem sessões a terceiros'
   assert.equal((await request('GET', url, null, 'other')).status, 404);
   assert.equal((await request('POST', `${url}/accept`, null, 'alice')).status, 409);
   assert.equal((await request('POST', `${url}/accept`, null, 'bob')).body.session.status, 'running');
+  await db.focusSession.update({ where: { id: created.body.session.id }, data: {
+    running_since: new Date(Date.now() - 301000),
+  } });
+  const history = await request('GET', '/focus-sessions/history', null, 'bob');
+  assert.equal(history.body.sessions.length, 1);
+  assert.equal((await request('GET', '/focus-sessions/history', null, 'other')).body.sessions.length, 0);
+  assert.equal((await request('POST', `${url}/credit`, { offsetMinutes: 0 }, 'other')).status, 404);
+  assert.equal((await request('POST', `${url}/credit`, { offsetMinutes: 0 }, 'bob')).body.credited, true);
 });

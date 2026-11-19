@@ -24,6 +24,7 @@ function serializeSession(row, now) {
     elapsedMs: elapsedMilliseconds(row, now),
     serverTime: now,
     expiresAt: row.expires_at,
+    completedAt: row.completed_at || (row.status === 'completed' ? row.updated_at : null),
   };
 }
 
@@ -49,6 +50,10 @@ async function settleSessions(tx, ids, now) {
           status,
           elapsed_ms: elapsedMilliseconds(row, now),
           running_since: null,
+          ...(status === 'completed' ? {
+            completed_at: new Date(new Date(row.running_since).getTime() +
+              row.duration_seconds * 1000 - row.elapsed_ms),
+          } : {}),
         },
       });
     }
@@ -151,4 +156,83 @@ async function changeFocusSession(prisma, userId, sessionId, action) {
   });
 }
 
-module.exports = { createFocusSession, getFocusSession, changeFocusSession };
+async function getFocusHistory(prisma, userId, cursor) {
+  if (cursor && !UUID.test(cursor)) return null;
+  return prisma.$transaction(async (tx) => {
+    await lockParticipants(tx, [userId]);
+    const now = Date.now();
+    await settleSessions(tx, [userId], now);
+    const rows = await tx.focusSession.findMany({
+      where: {
+        status: 'completed',
+        OR: [{ host_id: userId }, { guest_id: userId }],
+      },
+      include: { ...SESSION_INCLUDE, credits: { where: { user_id: userId } } },
+      orderBy: { id: 'asc' },
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: 101,
+    });
+    const page = rows.slice(0, 100);
+    return {
+      sessions: page.map((row) => ({
+        ...serializeSession(row, now),
+        credited: row.credits.length > 0,
+        creditedDate: row.credits[0]?.date_key || null,
+        creditedOffset: row.credits[0]?.timezone_offset_minutes ?? null,
+      })),
+      nextCursor: rows.length > 100 ? page[page.length - 1].id : null,
+    };
+  });
+}
+
+async function creditFocusSession(prisma, userId, sessionId, offsetMinutes) {
+  if (!UUID.test(sessionId) || !Number.isInteger(offsetMinutes) ||
+      offsetMinutes < -840 || offsetMinutes > 720) {
+    return { status: 400, detail: 'Sessão ou fuso horário inválido.' };
+  }
+  return prisma.$transaction(async (tx) => {
+    await lockParticipants(tx, [userId]);
+    const now = Date.now();
+    await settleSessions(tx, [userId], now);
+    const row = await tx.focusSession.findFirst({
+      where: { id: sessionId, status: 'completed', OR: [{ host_id: userId }, { guest_id: userId }] },
+    });
+    if (!row) return { status: 404, detail: 'Sessão concluída não encontrada.' };
+    const completedAt = row.completed_at || row.updated_at;
+    const completed = new Date(completedAt).getTime();
+    if (!Number.isFinite(completed)) {
+      return { status: 400, detail: 'Data de conclusão inválida.' };
+    }
+    const dateKey = new Date(completed - offsetMinutes * 60000).toISOString().slice(0, 10);
+    const seconds = Math.floor(row.elapsed_ms / 1000);
+    if (seconds <= 0) return { status: 200, credited: false };
+    const inserted = await tx.focusSessionCredit.createMany({
+      data: [{
+        session_id: sessionId, user_id: userId, date_key: dateKey,
+        timezone_offset_minutes: offsetMinutes,
+      }],
+      skipDuplicates: true,
+    });
+    if (inserted.count) {
+      await tx.dailyActivityCounter.upsert({
+        where: { user_id_activity_date: { user_id: userId, activity_date: dateKey } },
+        create: {
+          user_id: userId, activity_date: dateKey, focus_sessions: 1, focus_seconds: seconds,
+        },
+        update: { focus_sessions: { increment: 1 }, focus_seconds: { increment: seconds } },
+      });
+      return { status: 200, credited: true, dateKey, offsetMinutes };
+    }
+    const existing = await tx.focusSessionCredit.findUnique({
+      where: { session_id_user_id: { session_id: sessionId, user_id: userId } },
+    });
+    return {
+      status: 200, credited: true, dateKey: existing.date_key,
+      offsetMinutes: existing.timezone_offset_minutes,
+    };
+  });
+}
+
+module.exports = {
+  createFocusSession, getFocusSession, changeFocusSession, getFocusHistory, creditFocusSession,
+};

@@ -3,7 +3,9 @@ const crypto = require('crypto');
 const { URL } = require('url');
 const { PrismaClient } = require('@prisma/client');
 const { issueShopToken, authenticateShop, getShopState, purchaseItem, saveShopAvatar } = require('./shop');
-const { createFocusSession, getFocusSession, changeFocusSession } = require('./focusSessions');
+const {
+  createFocusSession, getFocusSession, changeFocusSession, getFocusHistory, creditFocusSession,
+} = require('./focusSessions');
 const { registerPushDevice, unregisterPushDevice, notifyFocus, startPushReceiptWorker } = require('./focusPush');
 
 function hashPassword(password) {
@@ -717,6 +719,18 @@ const server = http.createServer(async (req, res) => {
       if (path === '/focus-sessions' && req.method === 'GET') {
         return sendJson(res, 200, { session: await getFocusSession(prisma, actor.id) });
       }
+      if (path === '/focus-sessions/history' && req.method === 'GET') {
+        const history = await getFocusHistory(prisma, actor.id, qs.get('cursor'));
+        return history
+          ? sendJson(res, 200, history)
+          : sendJson(res, 400, { detail: 'Página de histórico inválida.' });
+      }
+      const creditMatch = /^\/focus-sessions\/([^/]+)\/credit$/.exec(path);
+      if (creditMatch && req.method === 'POST') {
+        const payload = await readJsonBody(req);
+        const result = await creditFocusSession(prisma, actor.id, creditMatch[1], payload?.offsetMinutes);
+        return sendJson(res, result.status, result);
+      }
       const match = /^\/focus-sessions\/([^/]+)(?:\/(accept|decline|cancel|pause|resume|stop))?$/.exec(path);
       if (match && req.method === 'GET' && !match[2]) {
         const session = await getFocusSession(prisma, actor.id, match[1]);
@@ -1028,33 +1042,38 @@ const server = http.createServer(async (req, res) => {
             characterName: 'Johnn',
           });
 
-      const counters = await getOrCreateActivityCounters(userId, targetDate);
-      const nextFs = Math.max(counters.focus_sessions, focusSessions);
-      const nextFsec = Math.max(counters.focus_seconds, focusSeconds);
-      const nextTc = Math.max(counters.tasks_completed, tasksCompleted);
-      const nextTcr = Math.max(counters.tasks_created, tasksCreated);
-
-      if (
-        nextFs !== counters.focus_sessions ||
-        nextFsec !== counters.focus_seconds ||
-        nextTc !== counters.tasks_completed ||
-        nextTcr !== counters.tasks_created
-      ) {
-        await prisma.dailyActivityCounter.update({
-          where: {
-            user_id_activity_date: {
-              user_id: userId,
-              activity_date: targetDate,
-            },
-          },
-          data: {
-            focus_sessions: nextFs,
-            focus_seconds: nextFsec,
-            tasks_completed: nextTc,
-            tasks_created: nextTcr,
-          },
+      await getOrCreateActivityCounters(userId, targetDate);
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT user_id FROM daily_activity_counters WHERE user_id = ${userId} AND activity_date = ${targetDate} FOR UPDATE`;
+        const counters = await tx.dailyActivityCounter.findUnique({
+          where: { user_id_activity_date: { user_id: userId, activity_date: targetDate } },
         });
-      }
+        const nextFs = Math.max(counters.focus_sessions, focusSessions);
+        const nextFsec = Math.max(counters.focus_seconds, focusSeconds);
+        const nextTc = Math.max(counters.tasks_completed, tasksCompleted);
+        const nextTcr = Math.max(counters.tasks_created, tasksCreated);
+        if (
+          nextFs !== counters.focus_sessions ||
+          nextFsec !== counters.focus_seconds ||
+          nextTc !== counters.tasks_completed ||
+          nextTcr !== counters.tasks_created
+        ) {
+          await tx.dailyActivityCounter.update({
+            where: {
+              user_id_activity_date: {
+                user_id: userId,
+                activity_date: targetDate,
+              },
+            },
+            data: {
+              focus_sessions: nextFs,
+              focus_seconds: nextFsec,
+              tasks_completed: nextTc,
+              tasks_created: nextTcr,
+            },
+          });
+        }
+      });
 
       const dailyQuests = await ensureDailyQuestsAndEvaluate(userId, targetDate);
       const finalCounters = await getOrCreateActivityCounters(userId, targetDate);
@@ -1095,42 +1114,44 @@ const server = http.createServer(async (req, res) => {
         wasCompletedByTier[q.tier] = Boolean(q.completed);
       });
 
-      const counters = await getOrCreateActivityCounters(userId, targetDate);
-      let nextFs =
-        counters.focus_sessions + (Number(payload.focus_sessions_delta) || 0);
-      let nextFsec =
-        counters.focus_seconds + (Number(payload.focus_seconds_delta) || 0);
-      let nextTc =
-        counters.tasks_completed + (Number(payload.tasks_completed_delta) || 0);
-      let nextTcr =
-        counters.tasks_created + (Number(payload.tasks_created_delta) || 0);
+      await getOrCreateActivityCounters(userId, targetDate);
+      const updatedCounters = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT user_id FROM daily_activity_counters WHERE user_id = ${userId} AND activity_date = ${targetDate} FOR UPDATE`;
+        const counters = await tx.dailyActivityCounter.findUnique({
+          where: { user_id_activity_date: { user_id: userId, activity_date: targetDate } },
+        });
+        let nextFs = counters.focus_sessions + (Number(payload.focus_sessions_delta) || 0);
+        let nextFsec = counters.focus_seconds + (Number(payload.focus_seconds_delta) || 0);
+        let nextTc = counters.tasks_completed + (Number(payload.tasks_completed_delta) || 0);
+        let nextTcr = counters.tasks_created + (Number(payload.tasks_created_delta) || 0);
 
-      if (payload.focus_sessions_total !== undefined && payload.focus_sessions_total !== null) {
-        nextFs = Math.max(nextFs, Number(payload.focus_sessions_total) || 0);
-      }
-      if (payload.focus_seconds_total !== undefined && payload.focus_seconds_total !== null) {
-        nextFsec = Math.max(nextFsec, Number(payload.focus_seconds_total) || 0);
-      }
-      if (payload.tasks_completed_total !== undefined && payload.tasks_completed_total !== null) {
-        nextTc = Math.max(0, Number(payload.tasks_completed_total) || 0);
-      }
-      if (payload.tasks_created_total !== undefined && payload.tasks_created_total !== null) {
-        nextTcr = Math.max(nextTcr, Number(payload.tasks_created_total) || 0);
-      }
+        if (payload.focus_sessions_total !== undefined && payload.focus_sessions_total !== null) {
+          nextFs = Math.max(nextFs, Number(payload.focus_sessions_total) || 0);
+        }
+        if (payload.focus_seconds_total !== undefined && payload.focus_seconds_total !== null) {
+          nextFsec = Math.max(nextFsec, Number(payload.focus_seconds_total) || 0);
+        }
+        if (payload.tasks_completed_total !== undefined && payload.tasks_completed_total !== null) {
+          nextTc = Math.max(0, Number(payload.tasks_completed_total) || 0);
+        }
+        if (payload.tasks_created_total !== undefined && payload.tasks_created_total !== null) {
+          nextTcr = Math.max(nextTcr, Number(payload.tasks_created_total) || 0);
+        }
 
-      const updatedCounters = await prisma.dailyActivityCounter.update({
-        where: {
-          user_id_activity_date: {
-            user_id: userId,
-            activity_date: targetDate,
+        return tx.dailyActivityCounter.update({
+          where: {
+            user_id_activity_date: {
+              user_id: userId,
+              activity_date: targetDate,
+            },
           },
-        },
-        data: {
-          focus_sessions: Math.max(0, nextFs),
-          focus_seconds: Math.max(0, nextFsec),
-          tasks_completed: Math.max(0, nextTc),
-          tasks_created: Math.max(0, nextTcr),
-        },
+          data: {
+            focus_sessions: Math.max(0, nextFs),
+            focus_seconds: Math.max(0, nextFsec),
+            tasks_completed: Math.max(0, nextTc),
+            tasks_created: Math.max(0, nextTcr),
+          },
+        });
       });
 
       const afterQuests = await ensureDailyQuestsAndEvaluate(userId, targetDate);
