@@ -3,7 +3,6 @@ import { toast } from '../utils/toast';
 
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
-const SUPABASE_SECRET_KEY = process.env.EXPO_PUBLIC_SUPABASE_SECRET_KEY || '';
 const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 let memorySession = null;
@@ -199,60 +198,7 @@ export async function registerUser({ username, email, password }) {
       throw err;
     }
 
-    if (SUPABASE_URL && SUPABASE_SECRET_KEY) {
-      try {
-        const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-          method: 'POST',
-          headers: {
-            apikey: SUPABASE_SECRET_KEY,
-            Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: { username, display_name: username },
-          }),
-        });
-        const createData = await createRes.json();
-        if (!createRes.ok) {
-          const raw =
-            createData.msg ||
-            createData.error_description ||
-            createData.message ||
-            'Erro ao criar conta';
-          throw new Error(translateError(raw));
-        }
-
-        const loginRes = await fetch(
-          `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
-          {
-            method: 'POST',
-            headers: {
-              apikey: SUPABASE_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-          }
-        );
-        const loginData = loginRes.ok ? await loginRes.json() : {};
-
-        const sessionPayload = {
-          message: 'Conta criada e autenticada com sucesso!',
-          access_token: loginData.access_token,
-          refresh_token: loginData.refresh_token,
-          user: loginData.user || createData,
-        };
-        return saveSession({ ...sessionPayload, needsOnboarding: true });
-      } catch (supaErr) {
-        if (!isNetworkOrParseError(supaErr)) {
-          throw supaErr;
-        }
-      }
-    }
-
-    // Fallback local quando backend/Supabase não estão configurados no ambiente
+    // Fallback local quando o servidor não está disponível.
     const users = getLocalUsers();
     const normalizedEmail = email.trim().toLowerCase();
     const existing = users.find((u) => u.email === normalizedEmail);

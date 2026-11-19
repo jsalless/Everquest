@@ -54,11 +54,12 @@ const authSource = transformSync(fs.readFileSync(path.join(__dirname, 'authServi
   plugins: [require.resolve('@babel/plugin-transform-modules-commonjs')],
 }).code;
 
-function openApp(storage, warn = () => {}) {
+function openApp(storage, warn = () => {}, options = {}) {
   const exports = {};
   vm.runInNewContext(authSource, {
     exports,
-    process: { env: {} },
+    process: { env: options.env || {} },
+    fetch: options.fetch,
     require: (name) => {
       if (name === './sessionStorage') return storage;
       if (name === '../utils/toast') return { toast: { warn } };
@@ -67,6 +68,26 @@ function openApp(storage, warn = () => {}) {
   });
   return exports;
 }
+
+test('cadastro offline não usa chave pública de administrador do Supabase', async () => {
+  const calls = [];
+  const app = openApp(createStorage(), () => {}, {
+    env: {
+      EXPO_PUBLIC_SUPABASE_URL: 'https://example.invalid',
+      EXPO_PUBLIC_SUPABASE_SECRET_KEY: 'test-secret',
+    },
+    fetch: async (url) => {
+      calls.push(url);
+      throw new Error('Failed to fetch');
+    },
+  });
+  const session = await app.registerUser({
+    email: 'alice@example.invalid', username: 'alice', password: 'password',
+  });
+  assert.equal(session.user.username, 'alice');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /\/auth\/register$/);
+});
 
 function createStorage() {
   let saved = null;

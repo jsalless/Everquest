@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const { URL } = require('url');
 const { PrismaClient } = require('@prisma/client');
 const { issueShopToken, authenticateShop, getShopState, purchaseItem, saveShopAvatar } = require('./shop');
+const { createFocusSession, getFocusSession, changeFocusSession } = require('./focusSessions');
+const { registerPushDevice, unregisterPushDevice, notifyFocus, startPushReceiptWorker } = require('./focusPush');
 
 function hashPassword(password) {
   return crypto
@@ -691,6 +693,63 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (path === '/focus-sessions' || path.startsWith('/focus-sessions/')) {
+      const actor = await authenticateShop(prisma, req.headers.authorization);
+      if (!actor) {
+        return sendJson(res, 401, { detail: 'Entre novamente pela sua conta do servidor para focar com amigos.' });
+      }
+      if (path === '/focus-sessions' && req.method === 'POST') {
+        const payload = await readJsonBody(req);
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          return sendJson(res, 400, { detail: 'Convite de foco inválido.' });
+        }
+        const result = await createFocusSession(prisma, actor.id, payload);
+        if (result.session) {
+          try {
+            result.pushStatus = await notifyFocus(prisma, result.session.guestId);
+          } catch (error) {
+            console.error('Falha ao preparar notificação do convite:', error.message);
+            result.pushStatus = 'failed';
+          }
+        }
+        return sendJson(res, result.status, result);
+      }
+      if (path === '/focus-sessions' && req.method === 'GET') {
+        return sendJson(res, 200, { session: await getFocusSession(prisma, actor.id) });
+      }
+      const match = /^\/focus-sessions\/([^/]+)(?:\/(accept|decline|cancel|pause|resume|stop))?$/.exec(path);
+      if (match && req.method === 'GET' && !match[2]) {
+        const session = await getFocusSession(prisma, actor.id, match[1]);
+        return sendJson(res, session ? 200 : 404, session ? { session } : { detail: 'Sessão não encontrada.' });
+      }
+      if (match && req.method === 'POST' && match[2]) {
+        const result = await changeFocusSession(prisma, actor.id, match[1], match[2]);
+        if (result.session && result.status === 200 && match[2] === 'accept') {
+          try {
+            result.pushStatus = await notifyFocus(prisma, result.session.hostId, true);
+          } catch (error) {
+            console.error('Falha ao notificar aceite do convite:', error.message);
+            result.pushStatus = 'failed';
+          }
+        }
+        return sendJson(res, result.status, result);
+      }
+      return sendJson(res, 404, { detail: 'Operação de foco não encontrada.' });
+    }
+
+    if (path === '/focus-push-device' && (req.method === 'POST' || req.method === 'DELETE')) {
+      const actor = await authenticateShop(prisma, req.headers.authorization);
+      if (!actor) return sendJson(res, 401, { detail: 'Entre novamente para configurar notificações.' });
+      const payload = await readJsonBody(req);
+      const token = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload.token : null;
+      const valid = req.method === 'POST'
+        ? await registerPushDevice(prisma, actor.id, token)
+        : await unregisterPushDevice(prisma, actor.id, token);
+      return valid
+        ? sendJson(res, 200, { ok: true })
+        : sendJson(res, 400, { detail: 'Token de notificação inválido.' });
+    }
+
     if (req.method === 'POST' && path === '/auth/register') {
       const payload = await readJsonBody(req);
       const rawEmail = String(payload.email || '')
@@ -1175,9 +1234,19 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    const isFriendRoute = path === '/friend-requests' ||
+      path === '/friends' || path === '/users/search' ||
+      /^\/friend-requests\/[^/]+\/accept$/.test(path) ||
+      /^\/friends\/[^/]+$/.test(path);
+    const friendActor = isFriendRoute
+      ? await authenticateShop(prisma, req.headers.authorization)
+      : null;
+    if (isFriendRoute && !friendActor) {
+      return sendJson(res, 401, { detail: 'Entre novamente pela sua conta do servidor para acessar amizades.' });
+    }
+
     if (req.method === 'GET' && path === '/friend-requests') {
-      const userId = (qs.get('user_id') || '').trim();
-      if (!userId) return sendJson(res, 400, { detail: 'Usuário obrigatório.' });
+      const userId = friendActor.id;
       const relations = await prisma.friendship.findMany({
         where: {
           status: 'pending',
@@ -1197,8 +1266,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && (path === '/friend-requests' || path === '/friends')) {
       const payload = await readJsonBody(req);
-      const userId = String(payload.user_id || '').trim();
-      if (!userId) return sendJson(res, 400, { detail: 'Usuário obrigatório.' });
+      const userId = friendActor.id;
       if (!String(payload.friend_id || payload.friend_username || '').trim()) {
         return sendJson(res, 400, { detail: 'Informe o usuário que deseja convidar.' });
       }
@@ -1213,7 +1281,7 @@ const server = http.createServer(async (req, res) => {
       if (target.id === userId) return sendJson(res, 400, { detail: 'Você não pode adicionar a si mesmo.' });
       const existing = await prisma.$transaction(async (tx) => {
         const pairKey = [userId, target.id].sort().join(':');
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${pairKey}))`;
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${pairKey}))::text`;
         const relation = await tx.friendship.findFirst({
           where: { OR: [
             { user_id: userId, friend_id: target.id },
@@ -1240,10 +1308,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && /^\/friend-requests\/[^/]+\/accept$/.test(path)) {
-      const payload = await readJsonBody(req);
-      const userId = String(payload.user_id || '').trim();
+      const userId = friendActor.id;
       const requestId = decodeURIComponent(path.split('/')[2]);
-      if (!userId) return sendJson(res, 400, { detail: 'Usuário obrigatório.' });
       const updated = await prisma.friendship.updateMany({
         where: { id: requestId, friend_id: userId, status: 'pending' },
         data: { status: 'accepted' },
@@ -1253,22 +1319,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && path === '/friends') {
-      const userId = (qs.get('user_id') || 'guest-jsalless').trim();
+      const userId = friendActor.id;
       const searchTerm = (qs.get('q') || '')
         .trim()
         .toLowerCase()
         .replace(/^@/, '');
-
-      const userExists = await prisma.profile.findUnique({
-        where: { id: userId },
-      });
-      if (!userExists) {
-        await ensureUserProfile({
-          userId,
-          username: userId,
-          characterName: 'Johnn',
-        });
-      }
 
       const relations = await prisma.friendship.findMany({
         where: {
@@ -1312,7 +1367,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && path === '/users/search') {
-      const userId = (qs.get('user_id') || 'guest-jsalless').trim();
+      const userId = friendActor.id;
       const searchTerm = (qs.get('q') || '')
         .trim()
         .toLowerCase()
@@ -1359,7 +1414,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'DELETE' && path.startsWith('/friends/')) {
       const friendId = decodeURIComponent(path.split('/friends/')[1] || '');
-      const userId = (qs.get('user_id') || 'guest-jsalless').trim();
+      const userId = friendActor.id;
 
       await prisma.friendship.deleteMany({
         where: {
@@ -1544,6 +1599,7 @@ if (require.main === module) {
         process.exit(0);
       }
       server.listen(PORT, '0.0.0.0', () => {
+        startPushReceiptWorker(prisma);
         console.log(
           `Everquest Prisma + Supabase PostgreSQL API rodando em http://localhost:${PORT}`
         );

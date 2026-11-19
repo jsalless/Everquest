@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
+const { issueShopToken } = require('./shop');
 
 test('inicialização não cria perfis nem amizades de demonstração', async () => {
   const writes = [];
@@ -118,10 +119,11 @@ test('pedidos precisam ser aceitos pelo destinatário antes de virar amizade', a
     module: { exports: {} }, process: { env: {}, argv: [] }, console, Buffer, URL,
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'prismaServer.js'), 'utf8'), context);
-  const request = (method, url, body) => new Promise((resolve) => {
+  const request = (method, url, body, actor) => new Promise((resolve) => {
     const req = new EventEmitter();
     req.method = method;
     req.url = url;
+    req.headers = actor ? { authorization: `Bearer ${issueShopToken(actor, 'private')}` } : {};
     const res = {
       writeHead(status) { this.status = status; },
       end(data) { resolve({ status: this.status, body: JSON.parse(data) }); },
@@ -133,16 +135,17 @@ test('pedidos precisam ser aceitos pelo destinatário antes de virar amizade', a
     });
   });
 
-  assert.equal((await request('POST', '/friend-requests', { user_id: 'alice', friend_id: 'bob' })).status, 201);
-  assert.equal((await request('GET', '/friends?user_id=bob')).body.total, 0);
-  const pending = await request('GET', '/friend-requests?user_id=bob');
+  assert.equal((await request('POST', '/friend-requests', { user_id: 'alice', friend_id: 'bob' })).status, 401);
+  assert.equal((await request('POST', '/friend-requests', { user_id: 'bob', friend_id: 'bob' }, 'alice')).status, 201);
+  assert.equal((await request('GET', '/friends?user_id=alice', null, 'bob')).body.total, 0);
+  const pending = await request('GET', '/friend-requests?user_id=alice', null, 'bob');
   assert.equal(pending.body.incoming.length, 1);
   assert.equal(pending.body.incoming[0].user.avatarConfig._authHash, undefined);
-  assert.equal((await request('POST', '/friend-requests', { user_id: 'bob', friend_id: 'alice' })).status, 409);
-  assert.equal((await request('POST', '/friend-requests', { user_id: 'alice', friend_id: 'alice' })).status, 400);
-  assert.equal((await request('POST', '/friend-requests', { user_id: 'alice', friend_id: 'missing' })).status, 404);
-  assert.equal((await request('POST', '/friend-requests/request-1/accept', { user_id: 'alice' })).status, 404);
-  assert.equal((await request('POST', '/friend-requests/request-1/accept', { user_id: 'bob' })).status, 200);
-  assert.equal((await request('POST', '/friend-requests/request-1/accept', { user_id: 'bob' })).status, 404);
-  assert.equal((await request('GET', '/friends?user_id=bob')).body.friends[0].id, 'alice');
+  assert.equal((await request('POST', '/friend-requests', { friend_id: 'alice' }, 'bob')).status, 409);
+  assert.equal((await request('POST', '/friend-requests', { friend_id: 'alice' }, 'alice')).status, 400);
+  assert.equal((await request('POST', '/friend-requests', { friend_id: 'missing' }, 'alice')).status, 404);
+  assert.equal((await request('POST', '/friend-requests/request-1/accept', { user_id: 'bob' }, 'alice')).status, 404);
+  assert.equal((await request('POST', '/friend-requests/request-1/accept', null, 'bob')).status, 200);
+  assert.equal((await request('POST', '/friend-requests/request-1/accept', null, 'bob')).status, 404);
+  assert.equal((await request('GET', '/friends', null, 'bob')).body.friends[0].id, 'alice');
 });

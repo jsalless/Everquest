@@ -12,6 +12,7 @@ import { usePreferences } from '../contexts/PreferencesContext';
 import { useSession } from '../contexts/SessionContext';
 import { clearSession, updateAccount, updatePassword } from '../services/authService';
 import { cancelAllFocusAlerts, requestFocusPermission } from '../services/focusAlerts';
+import { unregisterFocusPush } from '../services/focusPush';
 import { toast } from '../utils/toast';
 
 export default function SettingsScreen() {
@@ -95,6 +96,12 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       await cancelAllFocusAlerts();
+      try {
+        await unregisterFocusPush(session?.shop_token);
+      } catch (error) {
+        console.error('Falha ao desativar notificações de foco:', error);
+        toast.warn('Você saiu, mas não foi possível desativar as notificações neste aparelho.');
+      }
       await clearSession();
       setSession(null);
       setFriendInvite(null);

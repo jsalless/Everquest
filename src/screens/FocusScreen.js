@@ -16,10 +16,13 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Svg, { Rect, Path, Line, Circle } from 'react-native-svg';
+import Feather from '@expo/vector-icons/Feather';
 import Navbar from '../components/Navbar';
+import FocusInviteModal from '../components/FocusInviteModal';
 import { toast } from '../utils/toast';
 import { syncDailyActivityProgress } from '../services/dailyQuestService';
 import useFocusClock from '../hooks/useFocusClock';
+import useSharedFocus from '../hooks/useSharedFocus';
 
 const goblinFocoImage = require('../../assets/GoblinFoco.png');
 
@@ -533,14 +536,17 @@ function StatsBarChartIcon({ size = 22, color = '#000C56' }) {
 
 export default function FocusScreen({
   user,
+  focusToken,
   activeTab = 'focus',
   onChangeTab,
   onFocusStateChange,
 }) {
   const { colors, preferences } = usePreferences();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const [isFocusing, setIsFocusing] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isSoloFocusing, setIsFocusing] = useState(false);
+  const [isSoloPaused, setIsPaused] = useState(false);
+  const [isInviteVisible, setIsInviteVisible] = useState(false);
+  const [dismissedInviteId, setDismissedInviteId] = useState(null);
 
   // stepIndex: 0 = Cronômetro (progressivo), 1..24 = Temporizador (stepIndex * 5 minutos, regressivo)
   const [stepIndex, setStepIndex] = useState(0);
@@ -555,10 +561,11 @@ export default function FocusScreen({
   const [periodOffset, setPeriodOffset] = useState(0);
   const [selectedBucketKey, setSelectedBucketKey] = useState(null);
 
-  const expandAnim = useRef(new Animated.Value(0)).current;
+  const [expandAnim] = useState(() => new Animated.Value(0));
   const goblinFloatAnim = useRef(new Animated.Value(0)).current;
   const modalSlideAnim = useRef(new Animated.Value(0)).current;
   const statsSlideAnim = useRef(new Animated.Value(0)).current;
+  const wasSharedActive = useRef(false);
 
   const stepIndexRef = useRef(stepIndex);
   stepIndexRef.current = stepIndex;
@@ -620,6 +627,44 @@ export default function FocusScreen({
       }
     });
   };
+
+  const finishSharedSession = (session) => {
+    setIsInviteVisible(false);
+    if (session.status === 'completed') {
+      const focusedSeconds = Math.floor(session.elapsedMs / 1000);
+      if (focusedSeconds > 0 && wasSharedActive.current) {
+        recordFocusSession(focusedSeconds, session.durationSeconds ? 'Temporizador' : 'Cronômetro');
+      }
+      if (wasSharedActive.current) {
+        toast.success('Sessão de foco com amigo finalizada.');
+      } else {
+        toast.info('A sessão de foco com seu amigo terminou.');
+      }
+    } else if (session.status === 'declined') {
+      toast.info('O convite para focar foi recusado.');
+    } else if (session.status === 'expired') {
+      toast.info('O convite para focar expirou.');
+    } else if (session.status === 'cancelled' && session.guestId === user.id) {
+      toast.info('O convite para focar foi cancelado.');
+    }
+  };
+  const shared = useSharedFocus(focusToken, finishSharedSession);
+  const sharedActive = !isSoloFocusing && ['running', 'paused'].includes(shared.session?.status);
+  const isFocusing = isSoloFocusing || sharedActive;
+  const isPaused = sharedActive ? shared.session.status === 'paused' : isSoloPaused;
+  const isSharedHost = sharedActive && shared.session.hostId === user.id;
+
+  useEffect(() => {
+    if (sharedActive === wasSharedActive.current) return;
+    wasSharedActive.current = sharedActive;
+    if (onFocusStateChange) onFocusStateChange(sharedActive);
+    Animated.timing(expandAnim, {
+      toValue: sharedActive ? 1 : 0,
+      duration: sharedActive ? 650 : 550,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [sharedActive, expandAnim, onFocusStateChange]);
 
   useEffect(() => {
     if (!isFocusing) {
@@ -772,8 +817,8 @@ export default function FocusScreen({
   };
 
   useFocusClock({
-    running: isFocusing,
-    paused: isPaused,
+    running: isSoloFocusing,
+    paused: isSoloPaused,
     isTimer: isTimerMode,
     seconds,
     setSeconds,
@@ -790,6 +835,11 @@ export default function FocusScreen({
   };
 
   const handleStartFocus = () => {
+    if (shared.session?.status === 'pending') {
+      setDismissedInviteId(null);
+      setIsInviteVisible(true);
+      return;
+    }
     const initialSecs = isTimerMode ? selectedMinutes * 60 : 0;
     setSeconds(initialSecs);
     setIsPaused(false);
@@ -820,6 +870,10 @@ export default function FocusScreen({
   };
 
   const handleStopFocus = () => {
+    if (sharedActive) {
+      shared.action('stop').catch((error) => toast.error(error.message));
+      return;
+    }
     const elapsedSeconds = isTimerMode
       ? Math.max(0, selectedMinutes * 60 - seconds)
       : seconds;
@@ -848,6 +902,10 @@ export default function FocusScreen({
   };
 
   const handleTogglePause = () => {
+    if (sharedActive) {
+      shared.action(isPaused ? 'resume' : 'pause').catch((error) => toast.error(error.message));
+      return;
+    }
     setIsPaused((prev) => {
       const next = !prev;
       if (next) {
@@ -933,6 +991,11 @@ export default function FocusScreen({
   const displayedTitle = activeBucket
     ? activeBucket.shortTitle
     : periodView.periodShortTitle;
+  const hasPendingInvite = shared.session?.status === 'pending';
+  const inviteVisible = !isFocusing && (
+    isInviteVisible ||
+    (hasPendingInvite && shared.session.guestId === user.id && dismissedInviteId !== shared.session.id)
+  );
 
   return (
     <View style={styles.root}>
@@ -950,6 +1013,18 @@ export default function FocusScreen({
             accessibilityLabel="Ver estatísticas de foco por dia"
           >
             <StatsBarChartIcon size={20} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.statsHeaderButton}
+            activeOpacity={0.82}
+            onPress={() => {
+              setDismissedInviteId(null);
+              setIsInviteVisible(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Convidar amigo para focar"
+          >
+            <Feather name="user-plus" size={20} color={colors.text} />
           </TouchableOpacity>
         </Animated.View>
 
@@ -1022,9 +1097,22 @@ export default function FocusScreen({
                 },
               ]}
             >
-              {formatTimer(seconds)}
+              {formatTimer(sharedActive ? shared.seconds : seconds)}
             </Animated.Text>
           </TouchableOpacity>
+          {sharedActive ? (
+            <Text style={styles.sharedFocusLabel}>
+              {`Focando com ${isSharedHost ? shared.session.guestName : shared.session.hostName}`}
+              {!isSharedHost ? '\nO anfitrião controla a sessão' : ''}
+              {shared.error ? '\nSem conexão: aguardando sincronização' : ''}
+            </Text>
+          ) : isSoloFocusing && ['running', 'paused'].includes(shared.session?.status) ? (
+            <Text style={styles.sharedFocusLabel}>
+              Seu amigo iniciou uma sessão. Finalize o foco individual para acompanhar.
+            </Text>
+          ) : shared.error ? (
+            <Text style={styles.focusConnectionError}>{shared.error}</Text>
+          ) : null}
 
           {/* Área de Ação: Botão "Iniciar foco" ou Botões Circulares (Parar / Pausar) */}
           <View style={styles.actionArea}>
@@ -1036,7 +1124,9 @@ export default function FocusScreen({
                 accessibilityRole="button"
                 accessibilityLabel="Iniciar foco"
               >
-                <Text style={styles.startFocusButtonText}>Iniciar foco</Text>
+                <Text style={styles.startFocusButtonText}>
+                  {hasPendingInvite ? 'Ver convite' : 'Iniciar foco'}
+                </Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.focusControlsRow}>
@@ -1045,6 +1135,7 @@ export default function FocusScreen({
                   style={styles.stopCircleButton}
                   activeOpacity={0.85}
                   onPress={handleStopFocus}
+                  disabled={sharedActive && (!isSharedHost || shared.busy)}
                   accessibilityRole="button"
                   accessibilityLabel="Parar e sair do foco"
                 >
@@ -1066,6 +1157,7 @@ export default function FocusScreen({
                   style={styles.pauseCircleButton}
                   activeOpacity={0.85}
                   onPress={handleTogglePause}
+                  disabled={sharedActive && (!isSharedHost || shared.busy)}
                   accessibilityRole="button"
                   accessibilityLabel={isPaused ? 'Retomar foco' : 'Pausar foco'}
                 >
@@ -1124,6 +1216,23 @@ export default function FocusScreen({
           />
         </Animated.View>
       </View>
+
+      {inviteVisible ? (
+        <FocusInviteModal
+          visible
+          onClose={() => {
+            setDismissedInviteId(shared.session?.id || null);
+            setIsInviteVisible(false);
+          }}
+          token={focusToken}
+          userId={user.id}
+          session={shared.session}
+          durationSeconds={selectedMinutes * 60}
+          busy={shared.busy}
+          onInvite={shared.invite}
+          onAction={shared.action}
+        />
+      ) : null}
 
       {/* Modal 1: Seleção de Cronômetro (0) / Temporizador (> 0) */}
       <Modal
@@ -1620,6 +1729,7 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
+    gap: 10,
     zIndex: 3,
   },
   statsHeaderButton: {
@@ -1666,6 +1776,19 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     letterSpacing: 1.2,
+  },
+  sharedFocusLabel: {
+    marginTop: 10,
+    color: '#FFFFFF',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  focusConnectionError: {
+    marginTop: 10,
+    color: colors.text,
+    fontSize: 12,
+    textAlign: 'center',
   },
   actionArea: {
     marginTop: 20,

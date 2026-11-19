@@ -158,27 +158,35 @@ export default function ShopScreen({ token, onChangeTab, onOpenWardrobe }) {
               </Pressable> : null}
             </View>
           )}
-          <Text style={[styles.sectionTitle, styles.pageTitle]} accessibilityRole="header">✦  Em destaque</Text>
-          <Text style={[styles.subtitle, styles.pageSubtitle]}>Peças especiais para a sua próxima jornada.</Text>
-          <View style={styles.grid}>{featuredItems.map((item) => renderItem(item, true))}</View>
+          {catalog.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>sem itens disponíveis para compra</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={[styles.sectionTitle, styles.pageTitle]} accessibilityRole="header">✦  Em destaque</Text>
+              <Text style={[styles.subtitle, styles.pageSubtitle]}>Peças especiais para a sua próxima jornada.</Text>
+              <View style={styles.grid}>{featuredItems.map((item) => renderItem(item, true))}</View>
 
-          <Text style={[styles.sectionTitle, styles.pageTitle]} accessibilityRole="header">Catálogo</Text>
-          <View style={styles.categories}>
-            {categories.map(({ id, label }) => (
-              <Pressable
-                key={id}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: category === id }}
-                onPress={() => setCategory(id)}
-                style={[styles.chip, category === id && styles.selectedChip]}
-              >
-                <Text style={[styles.chipText, category === id && styles.selectedChipText]}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.grid}>
-            {catalog.filter((item) => category === 'all' || item.slot === category).map((item) => renderItem(item))}
-          </View>
+              <Text style={[styles.sectionTitle, styles.pageTitle]} accessibilityRole="header">Catálogo</Text>
+              <View style={styles.categories}>
+                {categories.map(({ id, label }) => (
+                  <Pressable
+                    key={id}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: category === id }}
+                    onPress={() => setCategory(id)}
+                    style={[styles.chip, category === id && styles.selectedChip]}
+                  >
+                    <Text style={[styles.chipText, category === id && styles.selectedChipText]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.grid}>
+                {catalog.filter((item) => category === 'all' || item.slot === category).map((item) => renderItem(item))}
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
       <Navbar activeTab="shop" onChangeTab={onChangeTab} />
@@ -228,6 +236,8 @@ const createStyles = (colors) => StyleSheet.create({
   pageTitle: { color: '#FFF5DA' },
   pageSubtitle: { color: '#F1D9CA' },
   notice: { padding: 12, marginBottom: 16, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
+  emptyState: { alignItems: 'center', justifyContent: 'center', marginVertical: 24, padding: 20, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  emptyText: { color: colors.secondary, fontSize: 14, fontWeight: '700', textAlign: 'center' },
   retry: { color: colors.accent, fontWeight: '800', marginVertical: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12, marginBottom: 22 },
   card: { width: '48%', overflow: 'hidden', borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },

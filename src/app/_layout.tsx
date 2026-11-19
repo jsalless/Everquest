@@ -1,16 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform } from 'react-native';
-import { Stack, useLocalSearchParams, usePathname } from 'expo-router';
+import { Stack, router, useLocalSearchParams, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PreferencesProvider, usePreferences } from '../contexts/PreferencesContext';
 import { SessionProvider, useSession } from '../contexts/SessionContext';
 import { FAVICON_SVG } from '../components/svgAssets';
 import { parseProfileLink } from '../components/ProfileQrCode';
-import { ToastContainer } from '../utils/toast';
+import { ToastContainer, toast } from '../utils/toast';
+import { registerFocusPush, subscribeFocusPush, subscribeFocusPushToken } from '../services/focusPush';
 
 function Navigation() {
   const { preferences, colors } = usePreferences();
-  const { setFriendInvite, isFocusing } = useSession();
+  const { session, setFriendInvite, isFocusing } = useSession();
+  const [focusNotifications, setFocusNotifications] = useState(0);
+  const handledFocusNotification = useRef(0);
   const pathname = usePathname();
   const { tab } = useLocalSearchParams();
   useEffect(() => {
@@ -34,6 +37,22 @@ function Navigation() {
     }
     return () => subscription.remove();
   }, [setFriendInvite]);
+  useEffect(() => subscribeFocusPush(() => setFocusNotifications((value) => value + 1)), []);
+  useEffect(() => {
+    if (focusNotifications === handledFocusNotification.current || !session || session.needsOnboarding || isFocusing) return;
+    handledFocusNotification.current = focusNotifications;
+    router.replace({ pathname: '/', params: { tab: 'focus' } });
+  }, [focusNotifications, session, isFocusing]);
+  useEffect(() => {
+    const token = session?.shop_token;
+    if (!token || session?.needsOnboarding) return undefined;
+    const report = (error: Error) => {
+      console.error('Falha ao registrar notificações de foco:', error.message);
+      toast.warn(error.message || 'Não foi possível ativar as notificações de foco.');
+    };
+    registerFocusPush(token).catch(report);
+    return subscribeFocusPushToken(token, report);
+  }, [session?.shop_token, session?.needsOnboarding]);
   const lightStatus = preferences.theme === 'dark' || isFocusing ||
     ['/login', '/onboarding', '/character', '/settings'].includes(pathname) ||
     (pathname === '/' && (tab === 'profile' || tab === 'shop'));

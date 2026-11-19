@@ -20,6 +20,7 @@ import CharacterAvatar, {
   HAIR_OPTIONS,
   HAIR_COLORS,
   EYES_OPTIONS,
+  EYE_COLORS,
   SHIRT_OPTIONS,
   SHIRT_COLORS,
   PANTS_OPTIONS,
@@ -180,6 +181,7 @@ export default function CharacterCreationScreen({
     return {
       ...DEFAULT_AVATAR_CONFIG,
       ...saved,
+      hair: saved.hair === 'none' ? 'none' : 'hair1',
       characterName: isEditing ? saved.characterName || 'Johnn' : '',
     };
   });
@@ -260,7 +262,7 @@ export default function CharacterCreationScreen({
 
   const equipmentSection = (slot, title, options, colors = [], swatchTitle, secondaryColor) => {
     const colorField = `${slot}Color`;
-    const starter = STARTER_EQUIPMENT.filter((item) => item.slot === slot);
+    const starter = STARTER_EQUIPMENT.filter((item) => item.slot === slot && item.id !== 'head-traveler');
     const owned = catalog.filter((item) => item.slot === slot && (ownedItems.includes(item.id) || avatarConfig[slot] === item.id));
     return {
       swatchTitle,
@@ -328,8 +330,14 @@ export default function CharacterCreationScreen({
 
       case 'eyes':
         return {
-          swatchTitle: null,
-          swatches: [],
+          swatchTitle: 'Cor dos olhos',
+          swatches: EYE_COLORS.map((c) => ({
+            id: c.id,
+            label: c.label,
+            color: c.id,
+            selected: avatarConfig.eyeColor === c.id,
+            onSelect: () => handleSelectField('eyeColor', c.id),
+          })),
           gridTitle: 'Olhos',
           cards: EYES_OPTIONS.map((e) => ({
             id: e.id,
@@ -341,12 +349,15 @@ export default function CharacterCreationScreen({
         };
 
       case 'head':
-        return equipmentSection('head', 'Equipamentos de cabeça', [{ id: 'none', name: 'Sem equipamento' }]);
+        return equipmentSection('head', 'Equipamentos de cabeça', [
+          { id: 'none', name: 'Sem equipamento' },
+          { id: 'helmet2', name: 'Chapéu Arcano' },
+        ]);
 
       case 'shirt':
         return equipmentSection('shirt', 'Equipamentos de torso', SHIRT_OPTIONS, SHIRT_COLORS, 'Cor da camisa');
       case 'pants':
-        return equipmentSection('pants', 'Equipamentos de pernas', PANTS_OPTIONS, PANTS_COLORS, 'Cor da calça', '#FFEF64');
+        return equipmentSection('pants', 'Equipamentos de pernas', PANTS_OPTIONS, PANTS_COLORS, 'Cor da bermuda', '#F1C8B2');
 
       case 'weapon':
         return equipmentSection('weapon', 'Armas', [{ id: 'none', name: 'Sem arma' }]);
@@ -472,6 +483,9 @@ export default function CharacterCreationScreen({
                 {section.swatches.map((sw) => (
                   <TouchableOpacity
                     key={`sw-${sw.id}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={sw.label || sw.id}
+                    accessibilityState={{ selected: sw.selected }}
                     activeOpacity={0.85}
                     onPress={sw.onSelect}
                     style={[

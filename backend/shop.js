@@ -77,6 +77,11 @@ async function saveShopAvatar(prisma, profile, config) {
     if (typeof config[field] !== 'string' || !pattern.test(config[field])) return null;
     avatar[field] = config[field];
   }
+  const eyeColor = config.eyeColor === undefined ? profile.avatar_config.eyeColor : config.eyeColor;
+  if (eyeColor !== undefined) {
+    if (typeof eyeColor !== 'string' || !/^#[\da-f]{6}$/i.test(eyeColor)) return null;
+    avatar.eyeColor = eyeColor;
+  }
   const { _authHash } = profile.avatar_config;
   const { count } = await prisma.profile.updateMany({
     where: { id: profile.id, avatar_config: { path: ['_authHash'], equals: _authHash } },

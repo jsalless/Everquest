@@ -32,6 +32,7 @@ export default function App() {
         key={user.id}
         user={user}
         serverManaged={!!session.shop_token}
+        friendToken={session.shop_token}
         avatarConfig={avatarConfig}
         friendInvite={friendInvite}
         onConsumeFriendInvite={() => setFriendInvite(null)}
@@ -57,7 +58,9 @@ export default function App() {
   }
   return (
     <FocusScreen
+      key={`${user.id}:${session.shop_token || ''}`}
       user={user}
+      focusToken={session.shop_token}
       activeTab={activeTab}
       onChangeTab={onChangeTab}
       onFocusStateChange={setIsFocusing}

@@ -143,39 +143,37 @@ test('conflito concorrente do banco retorna erro explícito', async () => {
   assert.equal(result.status, 409);
 });
 
-test('loja autentica a conta, usa o preço do servidor e não cobra a mesma peça duas vezes', async () => {
+test('loja vazia não permite comprar peças removidas do catálogo', async () => {
   const { request, profiles } = setup();
   profiles[0].coins = 40;
   assert.equal((await request('/shop', {}, 'eq_token_alice', 'GET')).status, 401);
   const login = await request('/auth/login', { email: 'alice@example.com', password: 'old-pass' }, null, 'POST');
   const token = login.body.shop_token;
-  assert.equal((await request('/shop/purchase', { itemId: 'unknown' }, token, 'POST')).status, 404);
-  const buy = () => request('/shop/purchase', { itemId: 'shirt-astral', price: 1, userId: 'bob' }, token, 'POST');
-  assert.deepEqual((await buy()).body, { coins: 15, ownedItemIds: ['shirt-astral'] });
-  assert.deepEqual((await buy()).body, { coins: 15, ownedItemIds: ['shirt-astral'] });
-  assert.equal((await request('/shop/purchase', { itemId: 'pants-guardian' }, token, 'POST')).status, 409);
-  await request('/profiles/sync', { user_id: 'alice', coins: 40 }, null, 'POST');
-  assert.deepEqual((await request('/shop', {}, token, 'GET')).body, { coins: 15, ownedItemIds: ['shirt-astral'] });
+  assert.deepEqual((await request('/shop', {}, token, 'GET')).body, { coins: 40, ownedItemIds: [] });
+  for (const itemId of ['unknown', 'shirt-astral', 'pants-guardian']) {
+    assert.equal((await request('/shop/purchase', { itemId }, token, 'POST')).status, 404);
+  }
+  assert.deepEqual((await request('/shop', {}, token, 'GET')).body, { coins: 40, ownedItemIds: [] });
 });
 
-test('personalização só aceita roupas já compradas na categoria correta e persiste após login', async () => {
-  const { request, profiles } = setup();
-  profiles[0].coins = 25;
+test('personalização mantém equipamentos iniciais e rejeita peças removidas da loja', async () => {
+  const { request } = setup();
   const login = () => request('/auth/login', { email: 'alice@example.com', password: 'old-pass' }, null, 'POST');
   const token = (await login()).body.shop_token;
   const avatarConfig = {
     characterName: 'Maga', race: 'human', hair: 'hair2', eyes: 'eye1',
-    shirt: 'shirt-astral', pants: 'leg1', shoes: 'shoe1',
+    shirt: 'shirt1', pants: 'leg1', shoes: 'shoe1',
     skinColor: '#D5896B', hairColor: '#1B0700', shirtColor: '#222123',
     pantsColor: '#272E59', shoesColor: '#487762',
   };
-  assert.equal((await request('/shop/avatar', { avatarConfig }, token)).status, 400);
-  await request('/shop/purchase', { itemId: 'shirt-astral' }, token, 'POST');
-  assert.equal((await request('/shop/avatar', { avatarConfig: { ...avatarConfig, pants: 'shirt-astral' } }, token)).status, 400);
+  assert.equal((await request('/shop/avatar', { avatarConfig: { ...avatarConfig, shirt: 'shirt-astral' } }, token)).status, 400);
   assert.deepEqual((await request('/shop/avatar', { avatarConfig }, token)).body.avatarConfig, {
     ...avatarConfig, head: 'none', weapon: 'none',
   });
-  assert.equal((await login()).body.user.avatarConfig.shirt, 'shirt-astral');
+  assert.equal((await login()).body.user.avatarConfig.shirt, 'shirt1');
+  assert.equal((await request('/shop/avatar', {
+    avatarConfig: { ...avatarConfig, pants: 'weapon-wood' },
+  }, token)).status, 400);
 
   const updatedEquipment = { ...avatarConfig, head: 'head-traveler', weapon: 'weapon-wood' };
   assert.equal((await request('/shop/avatar', { avatarConfig: { ...updatedEquipment, head: 'weapon-wood' } }, token)).status, 400);
@@ -183,14 +181,37 @@ test('personalização só aceita roupas já compradas na categoria correta e pe
   const legacySave = await request('/shop/avatar', { avatarConfig }, token);
   assert.equal(legacySave.body.avatarConfig.head, 'head-traveler');
   assert.equal((await login()).body.user.avatarConfig.weapon, 'weapon-wood');
+
+  const newHelmet = { ...updatedEquipment, head: 'helmet2' };
+  assert.deepEqual((await request('/shop/avatar', { avatarConfig: newHelmet }, token)).body.avatarConfig, newHelmet);
+  assert.equal((await login()).body.user.avatarConfig.head, 'helmet2');
+  assert.equal((await request('/shop/avatar', { avatarConfig: { ...newHelmet, pants: 'helmet2' } }, token)).status, 400);
 });
 
 test('atributos somam somente o equipamento no espaço correto e voltam ao remover a peça', () => {
   const equipped = {
-    head: 'head-traveler', shirt: 'shirt-forest', pants: 'pants-dusk', shoes: 'shoes-ember', weapon: 'weapon-wood',
+    head: 'head-traveler', shirt: 'shirt1', pants: 'leg1', shoes: 'shoe1', weapon: 'weapon-wood',
   };
-  assert.deepEqual(getAvatarStats(equipped), { damage: 10, health: 110, armor: 3, magic: 2 });
+  assert.deepEqual(getAvatarStats(equipped), { damage: 8, health: 100, armor: 1, magic: 0 });
   assert.deepEqual(getAvatarStats({ ...equipped, head: 'weapon-wood', weapon: 'none' }), {
-    damage: 7, health: 110, armor: 2, magic: 2,
+    damage: 5, health: 100, armor: 0, magic: 0,
   });
+});
+
+test('cor dos olhos é validada, persiste no login e é preservada por clientes antigos', async () => {
+  const { request } = setup();
+  const login = () => request('/auth/login', { email: 'alice@example.com', password: 'old-pass' }, null, 'POST');
+  const token = (await login()).body.shop_token;
+  const avatarConfig = {
+    characterName: 'Maga', race: 'goblin', hair: 'hair1', eyes: 'eye1',
+    shirt: 'shirt1', pants: 'leg1', shoes: 'shoe1',
+    skinColor: '#F1C8B2', hairColor: '#F1A261', shirtColor: '#2D86C6',
+    pantsColor: '#492D2E', shoesColor: '#492D2E',
+  };
+  assert.equal((await request('/shop/avatar', { avatarConfig: { ...avatarConfig, eyeColor: 'red' } }, token)).status, 400);
+  const saved = await request('/shop/avatar', { avatarConfig: { ...avatarConfig, eyeColor: '#2E7D32' } }, token);
+  assert.equal(saved.body.avatarConfig.eyeColor, '#2E7D32');
+  assert.equal((await login()).body.user.avatarConfig.eyeColor, '#2E7D32');
+  const legacySave = await request('/shop/avatar', { avatarConfig }, token);
+  assert.equal(legacySave.body.avatarConfig.eyeColor, '#2E7D32');
 });

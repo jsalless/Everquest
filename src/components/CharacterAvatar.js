@@ -18,23 +18,41 @@ import {
   LEG1_SVG,
   SHOE1_SVG,
 } from './characterSvgAssets';
+import {
+  BODY_SVG,
+  BOOTS_SVG,
+  EYES_SVG,
+  GOBLIN_BODY_SVG,
+  GLOVES_SVG,
+  HAIR_SVG,
+  HELMET2_SVG,
+  HELMET_SVG,
+  MOUTH_SVG,
+  PANTS_SVG,
+  SHIRT_SVG,
+} from './newAvatarSvgAssets';
 
 const AVATAR_STORAGE_KEY = 'everquest_user_avatar_v2';
 
 export const DEFAULT_AVATAR_CONFIG = {
   characterName: 'Johnn',
   race: 'human',
-  skinColor: '#D5896B',
+  skinColor: '#F1C8B2',
   hair: 'hair1',
   eyes: 'eye1',
   ...DEFAULT_EQUIPMENT,
-  hairColor: '#1B0700',
-  shirtColor: '#222123',
-  pantsColor: '#272E59',
-  shoesColor: '#487762',
+  hairColor: '#F1A261',
+  eyeColor: '#33C0E2',
+  shirtColor: '#2D86C6',
+  pantsColor: '#492D2E',
+  shoesColor: '#492D2E',
 };
 
 let memoryAvatarConfig = { ...DEFAULT_AVATAR_CONFIG };
+
+function normalizeHair(hair) {
+  return hair === 'none' ? 'none' : 'hair1';
+}
 
 export function loadSavedAvatar() {
   try {
@@ -42,7 +60,11 @@ export function loadSavedAvatar() {
       const raw = localStorage.getItem(AVATAR_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        memoryAvatarConfig = { ...DEFAULT_AVATAR_CONFIG, ...parsed };
+        memoryAvatarConfig = {
+          ...DEFAULT_AVATAR_CONFIG,
+          ...parsed,
+          hair: normalizeHair(parsed.hair),
+        };
         return memoryAvatarConfig;
       }
     }
@@ -51,7 +73,11 @@ export function loadSavedAvatar() {
 }
 
 export function saveAvatarConfig(nextConfig) {
-  const merged = { ...DEFAULT_AVATAR_CONFIG, ...nextConfig };
+  const merged = {
+    ...DEFAULT_AVATAR_CONFIG,
+    ...nextConfig,
+    hair: normalizeHair(nextConfig.hair),
+  };
   memoryAvatarConfig = merged;
   try {
     if (typeof localStorage !== 'undefined') {
@@ -65,7 +91,7 @@ export const RACE_OPTIONS = [
   {
     id: 'human',
     name: 'Humano',
-    swatchColor: '#D5896B',
+    swatchColor: '#F1C8B2',
   },
   {
     id: 'goblin',
@@ -75,6 +101,7 @@ export const RACE_OPTIONS = [
 ];
 
 export const HUMAN_SKIN_COLORS = [
+  { id: '#F1C8B2', label: 'Pele Aventureira' },
   { id: '#F4C2A8', label: 'Pele Clara' },
   { id: '#E5A687', label: 'Pele Média Clara' },
   { id: '#D5896B', label: 'Pele Original' },
@@ -86,33 +113,8 @@ export const HUMAN_SKIN_COLORS = [
 export const HAIR_OPTIONS = [
   {
     id: 'hair1',
-    name: 'Cabelo Aventureiro',
-    swatchColor: '#1B0700',
-  },
-  {
-    id: 'hair2',
-    name: 'Cabelo Longo',
-    swatchColor: '#1B0700',
-  },
-  {
-    id: 'hair3',
-    name: 'Mechas Longas',
-    swatchColor: '#1B0700',
-  },
-  {
-    id: 'hair4',
-    name: 'Rabo de Cavalo',
-    swatchColor: '#1B0700',
-  },
-  {
-    id: 'hair5',
-    name: 'Cabelo Ondulado',
-    swatchColor: '#1B0700',
-  },
-  {
-    id: 'hair6',
-    name: 'Cabelo Rebelde',
-    swatchColor: '#1B0700',
+    name: 'Tranças Aventureiras',
+    swatchColor: '#F1A261',
   },
   {
     id: 'none',
@@ -122,6 +124,7 @@ export const HAIR_OPTIONS = [
 ];
 
 export const HAIR_COLORS = [
+  { id: '#F1A261', label: 'Ruivo Aventureiro' },
   { id: '#1B0700', label: 'Castanho Escuro' },
   { id: '#0F0F14', label: 'Preto Noite' },
   { id: '#8D3B1E', label: 'Ruivo Brasa' },
@@ -138,16 +141,26 @@ export const EYES_OPTIONS = [
   },
 ];
 
+export const EYE_COLORS = [
+  { id: '#33C0E2', label: 'Azul' },
+  { id: '#4E311F', label: 'Castanho' },
+  { id: '#2E7D32', label: 'Verde' },
+  { id: '#7153FD', label: 'Roxo' },
+  { id: '#B71C1C', label: 'Vermelho' },
+  { id: '#E6B84D', label: 'Dourado' },
+  { id: '#777777', label: 'Cinza' },
+];
+
 export const SHIRT_OPTIONS = [
   {
     id: 'shirt1',
-    name: 'Camisa Clássica',
-    swatchColor: '#222123',
+    name: 'Túnica Azul',
+    swatchColor: '#2D86C6',
   },
 ];
 
 export const SHIRT_COLORS = [
-  { id: '#222123', label: 'Preto Original' },
+  { id: '#2D86C6', label: 'Azul Aventureiro' },
   { id: '#7153FD', label: 'Roxo Everquest' },
   { id: '#1B3B8B', label: 'Azul Real' },
   { id: '#2E7D32', label: 'Verde Patrulheiro' },
@@ -158,14 +171,14 @@ export const SHIRT_COLORS = [
 export const PANTS_OPTIONS = [
   {
     id: 'leg1',
-    name: 'Calça com Cinto',
-    swatchColor: '#272E59',
-    beltColor: '#FFEF64',
+    name: 'Bermuda de Couro',
+    swatchColor: '#492D2E',
+    beltColor: '#F1C8B2',
   },
 ];
 
 export const PANTS_COLORS = [
-  { id: '#272E59', label: 'Azul Original' },
+  { id: '#492D2E', label: 'Couro Original' },
   { id: '#18181F', label: 'Preto Furtivo' },
   { id: '#4E311F', label: 'Couro Marrom' },
   { id: '#392682', label: 'Roxo Viajante' },
@@ -175,13 +188,13 @@ export const PANTS_COLORS = [
 export const SHOES_OPTIONS = [
   {
     id: 'shoe1',
-    name: 'Calçado Viajante',
-    swatchColor: '#487762',
+    name: 'Botas de Aventureiro',
+    swatchColor: '#492D2E',
   },
 ];
 
 export const SHOES_COLORS = [
-  { id: '#487762', label: 'Verde Original' },
+  { id: '#492D2E', label: 'Marrom Aventureiro' },
   { id: '#272E59', label: 'Azul Marinho' },
   { id: '#222123', label: 'Preto Sombrio' },
   { id: '#7153FD', label: 'Roxo Arcano' },
@@ -223,7 +236,110 @@ export default function CharacterAvatar({
 }) {
   const merged = { ...DEFAULT_AVATAR_CONFIG, ...config };
 
+  const newAvatarXml = useMemo(() => {
+    const bodyColor = merged.race === 'goblin' ? '#91D56B' : merged.skinColor;
+    // These offsets align the individual assets with the Group 96 reference canvas.
+    const withFillColor = (svgString, sourceColor, color) =>
+      extractInnerSvg(svgString).split(sourceColor).join(color);
+    const layer = (svgString, x, y, scale = 1) =>
+      `<g transform="translate(${x}, ${y}) scale(${scale})">${svgString}</g>`;
+    const equipmentLayer = (id, x, y, scale = 1) => {
+      const art = equipmentLayers.get(id);
+      return art ? layer(art, x, y, scale) : '';
+    };
+
+    const bodyLayer = layer(
+      merged.race === 'goblin'
+        ? extractInnerSvg(GOBLIN_BODY_SVG)
+        : withFillColor(BODY_SVG, '#F1C8B2', bodyColor),
+      merged.race === 'goblin' ? 20.462 : 55.086,
+      merged.race === 'goblin' ? 44.545 : 44.607
+    );
+    const hairLayer =
+      merged.hair !== 'none'
+        ? layer(withFillColor(HAIR_SVG, '#F1A261', merged.hairColor), 11.012, 42.877)
+        : '';
+    const shoesLayer =
+      merged.shoes === 'none'
+        ? ''
+        : merged.shoes === 'shoe1'
+          ? layer(
+              withFillColor(BOOTS_SVG, '#492D2E', merged.shoesColor),
+              54.371,
+              414.726
+            )
+          : equipmentLayer(merged.shoes, 60.56, 439.46);
+    const shirtLayer =
+      merged.shirt === 'none'
+        ? ''
+        : merged.shirt === 'shirt1'
+          ? layer(
+              withFillColor(
+                withFillColor(SHIRT_SVG, '#2D86C6', merged.shirtColor),
+                '#F1C8B2',
+                bodyColor
+              ),
+              65.111,
+              211.609
+            )
+          : equipmentLayer(merged.shirt, 72.65, 229.27);
+    const pantsLayer =
+      merged.pants === 'none'
+        ? ''
+        : merged.pants === 'leg1'
+          ? layer(withFillColor(PANTS_SVG, '#492D2E', merged.pantsColor), 97.147, 339.698)
+          : equipmentLayer(merged.pants, 64.13, 322.9);
+    const glovesLayer = layer(GLOVES_SVG, 32.619, 350.297);
+    const helmetLayer =
+      merged.head === 'none'
+        ? layer(HELMET_SVG, 0, 0)
+        : merged.head === 'helmet2'
+          ? layer(HELMET2_SVG, 68.5, 0, 0.87)
+          : equipmentLayer(merged.head, 36, 0, 1.48);
+    const coloredEyes = EYES_SVG.replaceAll('#33C0E2', merged.eyeColor);
+    const eyesSvg =
+      merged.race === 'goblin'
+        ? coloredEyes.replace(/(<path\b[^>]*\bfill=")white(")/gi, '$1#FFEF64$2')
+        : coloredEyes;
+    const eyesLayer =
+      merged.eyes !== 'none' ? layer(eyesSvg, 84.141, 116.342) : '';
+    const mouthLayer = layer(MOUTH_SVG, 97.5, 169.905);
+    const weaponLayer = equipmentLayer(merged.weapon, 204, 341, 1.18);
+    const viewBox = cropToWaist ? '0 0 337 350' : '0 0 337 566';
+
+    return `<svg viewBox="${viewBox}" fill="none" xmlns="http://www.w3.org/2000/svg">
+      ${bodyLayer}
+      ${pantsLayer}
+      ${hairLayer}
+      ${shirtLayer}
+      ${glovesLayer}
+      ${shoesLayer}
+      ${helmetLayer}
+      ${eyesLayer}
+      ${mouthLayer}
+      ${weaponLayer}
+    </svg>`;
+  }, [
+    merged.race,
+    merged.skinColor,
+    merged.hair,
+    merged.eyes,
+    merged.eyeColor,
+    merged.shirt,
+    merged.pants,
+    merged.shoes,
+    merged.head,
+    merged.weapon,
+    merged.hairColor,
+    merged.shirtColor,
+    merged.pantsColor,
+    merged.shoesColor,
+    cropToWaist,
+  ]);
+
   const composedXml = useMemo(() => {
+    if (merged.avatarStyle !== 'classic') return '';
+
     const isGoblin = merged.race === 'goblin';
     const humanColored = merged.skinColor
       ? INNER_RACE_HUMAN.replace(/#D5896B/gi, merged.skinColor)
@@ -295,7 +411,9 @@ export default function CharacterAvatar({
     }
 
     const headArt = equipmentLayers.get(merged.head);
-    const headLayer = headArt ? `<g transform="translate(107, -91) scale(1.48)">${headArt}</g>` : '';
+    const headLayer = merged.head === 'helmet2'
+      ? `<g transform="translate(113.5, -91) scale(0.87)">${extractInnerSvg(HELMET2_SVG)}</g>`
+      : headArt ? `<g transform="translate(107, -91) scale(1.48)">${headArt}</g>` : '';
     const weaponArt = equipmentLayers.get(merged.weapon);
     const weaponLayer = weaponArt
       ? `<g transform="translate(275, 341) rotate(28) scale(1.18) translate(-37, -113)">${weaponArt}</g>`
@@ -316,6 +434,7 @@ export default function CharacterAvatar({
       ${weaponLayer}
     </svg>`;
   }, [
+    merged.avatarStyle,
     merged.race,
     merged.skinColor,
     merged.hair,
@@ -332,5 +451,6 @@ export default function CharacterAvatar({
     cropToWaist,
   ]);
 
-  return <SvgXml xml={composedXml} width={width} height={height} />;
+  const avatarXml = merged.avatarStyle === 'classic' ? composedXml : newAvatarXml;
+  return <SvgXml xml={avatarXml} width={width} height={height} />;
 }

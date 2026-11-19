@@ -10,7 +10,6 @@ const SUPABASE_URL = (
 ).replace(/\/$/, '');
 
 const SUPABASE_API_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_SECRET_KEY ||
   process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   'sb_publishable_s5Dz7ucCwttYh-2ipIojwg_SYrzmYyq';
 
@@ -27,7 +26,7 @@ async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats)
   if (!SUPABASE_URL || !SUPABASE_API_KEY) return;
   try {
     if (stats) {
-      await fetch(
+      const response = await fetch(
         `${SUPABASE_URL}/rest/v1/daily_activity_counters?on_conflict=user_id,activity_date`,
         {
           method: 'POST',
@@ -44,6 +43,7 @@ async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats)
           }),
         }
       );
+      if (!response.ok) throw new Error(`Contadores: HTTP ${response.status}`);
     }
 
     if (Array.isArray(quests) && quests.length > 0) {
@@ -62,7 +62,7 @@ async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats)
         coins: Number(q.coins) || 0,
         xp: Number(q.xp) || 0,
       }));
-      await fetch(
+      const response = await fetch(
         `${SUPABASE_URL}/rest/v1/daily_quests?on_conflict=user_id,quest_date,tier`,
         {
           method: 'POST',
@@ -72,8 +72,11 @@ async function syncQuestsAndCountersToSupabase(userKey, todayKey, quests, stats)
           body: JSON.stringify(payload),
         }
       );
+      if (!response.ok) throw new Error(`Missões: HTTP ${response.status}`);
     }
-  } catch (_) {}
+  } catch (error) {
+    console.error('Não foi possível sincronizar as missões com o Supabase:', error);
+  }
 }
 
 const REWARDS_STORAGE_KEY = 'everquest_user_rewards_v1';
@@ -575,6 +578,9 @@ export async function fetchUserProgressionAndQuests(user) {
           { headers: getSupabaseHeaders() }
         ),
       ]);
+      if (!pRes.ok || !qRes.ok) {
+        throw new Error(`Consulta de perfil/missões: HTTP ${pRes.status}/${qRes.status}`);
+      }
 
       let mergedRewards = localRewards;
       if (pRes.ok) {
@@ -643,7 +649,9 @@ export async function fetchUserProgressionAndQuests(user) {
         dailyQuests: mergedQuests,
         fromDatabase: true,
       };
-    } catch (_) {}
+    } catch (error) {
+      console.error('Não foi possível carregar as missões do Supabase:', error);
+    }
   }
 
   return {
@@ -847,7 +855,7 @@ export async function claimDailyQuestReward(user, tierKey, { serverManaged = fal
 
     if (SUPABASE_URL && SUPABASE_API_KEY) {
       try {
-        await Promise.all([
+        const [, profileResponse] = await Promise.all([
           syncQuestsAndCountersToSupabase(
             userKey,
             todayKey,
@@ -869,7 +877,12 @@ export async function claimDailyQuestReward(user, tierKey, { serverManaged = fal
             }
           ),
         ]);
-      } catch (_) {}
+        if (!profileResponse.ok) {
+          throw new Error(`Atualização de perfil: HTTP ${profileResponse.status}`);
+        }
+      } catch (error) {
+        console.error('Não foi possível sincronizar as recompensas com o Supabase:', error);
+      }
     }
 
     return {

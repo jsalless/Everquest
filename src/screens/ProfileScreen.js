@@ -193,6 +193,7 @@ function SearchLensIcon({ size = 18, color = '#7C8292' }) {
 export default function ProfileScreen({
   user,
   serverManaged = false,
+  friendToken,
   avatarConfig,
   activeTab = 'profile',
   onChangeTab,
@@ -273,18 +274,23 @@ export default function ProfileScreen({
     let isMounted = true;
     async function initProfileProgressionAndFriends() {
       try {
-        if (!serverManaged) await syncUserProfileToBackend({
-          user,
-          avatarConfig,
-          level: loadedLevel.level,
-          xp: loadedRewards.xp,
-          coins: loadedRewards.coins,
-        });
+        if (!serverManaged) {
+          try {
+            await syncUserProfileToBackend({
+              user,
+              avatarConfig,
+              level: loadedLevel.level,
+              xp: loadedRewards.xp,
+              coins: loadedRewards.coins,
+            });
+          } catch (error) {
+            if (isMounted) toast.warn(error.message);
+          }
+        }
         if (!isMounted) return;
 
-        const [progressionRes, friendsRes, badgesRes] = await Promise.all([
+        const [progressionRes, badgesRes] = await Promise.all([
           fetchUserProgressionAndQuests(user),
-          fetchUserFriends(user, ''),
           fetchUserBadges(user),
         ]);
 
@@ -298,8 +304,15 @@ export default function ProfileScreen({
           if (Array.isArray(badgesRes?.badges) && badgesRes.badges.length > 0) {
             setBadgesList(badgesRes.badges);
           }
-          setFriendsList(friendsRes.friends);
-          setFriendsTotalCount(friendsRes.total);
+        }
+        try {
+          const friendsRes = await fetchUserFriends(friendToken, '');
+          if (isMounted) {
+            setFriendsList(friendsRes.friends);
+            setFriendsTotalCount(friendsRes.total);
+          }
+        } catch (error) {
+          if (isMounted) toast.error(error.message);
         }
       } catch (error) {
         if (isMounted) {
@@ -315,14 +328,14 @@ export default function ProfileScreen({
     return () => {
       isMounted = false;
     };
-  }, [user, avatarConfig, serverManaged]);
+  }, [user, avatarConfig, serverManaged, friendToken]);
 
   useEffect(() => {
     if (!isAddFriendModalVisible) return;
     let active = true;
     async function loadDirectory() {
       try {
-        const results = await searchRegisteredUsers(user, addFriendQuery);
+        const results = await searchRegisteredUsers(friendToken, addFriendQuery);
         if (active) {
           setDirectoryUsers(results);
         }
@@ -337,12 +350,12 @@ export default function ProfileScreen({
     return () => {
       active = false;
     };
-  }, [isAddFriendModalVisible, addFriendQuery, user, friendsList]);
+  }, [isAddFriendModalVisible, addFriendQuery, friendToken, friendsList]);
 
   useEffect(() => {
     if (!isAddFriendModalVisible) return;
     let active = true;
-    fetchFriendRequests(user).then((result) => {
+    fetchFriendRequests(friendToken).then((result) => {
       if (active) {
         setRequestsError('');
         setPendingRequests(result.incoming);
@@ -356,7 +369,7 @@ export default function ProfileScreen({
       }
     });
     return () => { active = false; };
-  }, [isAddFriendModalVisible, user, requestsRevision]);
+  }, [isAddFriendModalVisible, friendToken, requestsRevision]);
 
   async function handleAddFriend({ friendId, friendUsername }) {
     if (isSubmittingFriend) return;
@@ -364,7 +377,7 @@ export default function ProfileScreen({
     setFriendNotice('');
     try {
       const link = parseProfileLink(friendUsername);
-      const res = await sendFriendRequest(user, {
+      const res = await sendFriendRequest(friendToken, {
         friendId: link?.friendId || friendId,
         friendUsername: link ? null : friendUsername,
       });
@@ -386,10 +399,10 @@ export default function ProfileScreen({
     setIsSubmittingFriend(true);
     setFriendNotice('');
     try {
-      const result = await acceptFriendRequest(user, request.id);
+      const result = await acceptFriendRequest(friendToken, request.id);
       setPendingRequests((requests) => requests.filter((item) => item.id !== request.id));
       setFriendNotice(result.message);
-      const updated = await fetchConfirmedFriends(user);
+      const updated = await fetchConfirmedFriends(friendToken);
       setFriendsList(updated.friends);
       setFriendsTotalCount(updated.total);
       setRequestsRevision((revision) => revision + 1);
@@ -423,7 +436,7 @@ export default function ProfileScreen({
 
   async function handleRemoveFriend(friend) {
     try {
-      const res = await removeFriendRelationship(user, friend.id);
+      const res = await removeFriendRelationship(friendToken, friend.id);
       setFriendsList(res.friends);
       setFriendsTotalCount(res.total);
       toast.info(`${friend.characterName} foi removido da sua lista de amigos.`);
@@ -433,8 +446,8 @@ export default function ProfileScreen({
         console.error('Não foi possível atualizar as insígnias:', error);
         toast.error('Amigo removido, mas não foi possível atualizar as insígnias.');
       });
-    } catch {
-      toast.error('Não foi possível remover o amigo.');
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível remover o amigo.');
     }
   }
 
