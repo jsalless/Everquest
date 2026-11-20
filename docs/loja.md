@@ -8,7 +8,8 @@ O banner [shop.svg](../assets/shop.svg) ocupa toda a largura no topo. Em telas e
 
 ## Aparência, equipamentos e atributos
 
-- **Aparência** mantém raça, cabelo e olhos.
+- **Aparência** permite escolher raça, cabelo, três expressões para os olhos e a cor da íris. As sobrancelhas acompanham a cor do cabelo.
+- O **Cabelo Curto**, a **Túnica Bordada** e a **Calça de Couro** são opções iniciais personalizáveis, sem custo. A Túnica Bordada tem caimento amplo e enquadramento mais largo para acomodar a ponta lateral.
 - **Equipamentos** tem cinco espaços: cabeça, torso, pernas, pés e arma. As roupas e cores já salvas continuam funcionando. Cabeça e arma começam vazias, com um chapéu e uma espada de madeira iniciais disponíveis sem compra.
 - **Dano**, **Vida**, **Armadura** e **Magia** mostram os atributos base (5, 100, 0 e 0) mais os bônus das peças selecionadas. O painel atualiza na prévia antes de salvar; os valores são derivados do equipamento, não enviados pelo aplicativo como valores a persistir.
 

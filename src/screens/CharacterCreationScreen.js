@@ -18,6 +18,7 @@ import CharacterAvatar, {
   RACE_OPTIONS,
   HUMAN_SKIN_COLORS,
   HAIR_OPTIONS,
+  normalizeHair,
   HAIR_COLORS,
   EYES_OPTIONS,
   EYE_COLORS,
@@ -181,7 +182,7 @@ export default function CharacterCreationScreen({
     return {
       ...DEFAULT_AVATAR_CONFIG,
       ...saved,
-      hair: saved.hair === 'none' ? 'none' : 'hair1',
+      hair: normalizeHair(saved.hair),
       characterName: isEditing ? saved.characterName || 'Johnn' : '',
     };
   });
@@ -352,6 +353,7 @@ export default function CharacterCreationScreen({
         return equipmentSection('head', 'Equipamentos de cabeça', [
           { id: 'none', name: 'Sem equipamento' },
           { id: 'helmet2', name: 'Chapéu Arcano' },
+          { id: 'helmet3', name: 'Óculos de Aventureiro' },
         ]);
 
       case 'shirt':

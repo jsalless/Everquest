@@ -32,7 +32,8 @@ function formatEquipmentBonuses(stats) {
 function isAllowedEquipment(slot, id, ownedItemIds) {
   if (!Object.hasOwn(DEFAULT_EQUIPMENT, slot)) return false;
   if (id === DEFAULT_EQUIPMENT[slot] || id === 'none') return true;
-  if (slot === 'head' && id === 'helmet2') return true;
+  if (slot === 'head' && (id === 'helmet2' || id === 'helmet3')) return true;
+  if ((slot === 'shirt' && id === 'shirt2') || (slot === 'pants' && id === 'leg2')) return true;
   return equipmentById.get(id)?.slot === slot && (starterIds.has(id) || ownedItemIds.includes(id));
 }
 

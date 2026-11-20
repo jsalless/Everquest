@@ -306,14 +306,21 @@ export default function ProfileScreen({
             setBadgesList(badgesRes.badges);
           }
         }
-        try {
-          const friendsRes = await fetchUserFriends(friendToken, '');
+        if (!friendToken) {
           if (isMounted) {
-            setFriendsList(friendsRes.friends);
-            setFriendsTotalCount(friendsRes.total);
+            setFriendsList([]);
+            setFriendsTotalCount(0);
           }
-        } catch (error) {
-          if (isMounted) toast.error(error.message);
+        } else {
+          try {
+            const friendsRes = await fetchUserFriends(friendToken, '');
+            if (isMounted) {
+              setFriendsList(friendsRes.friends);
+              setFriendsTotalCount(friendsRes.total);
+            }
+          } catch (error) {
+            if (isMounted) toast.error(error.message);
+          }
         }
       } catch (error) {
         if (isMounted) {

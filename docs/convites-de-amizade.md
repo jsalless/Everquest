@@ -62,9 +62,23 @@ Configure `SHOP_SESSION_SECRET` como segredo estável no servidor e use um
 endereço `EXPO_PUBLIC_API_URL` acessível pelos aparelhos. Não inclua segredos
 em variáveis `EXPO_PUBLIC_`.
 
-Para avisos com o aplicativo fechado, configure as credenciais de push do
-Firebase e/ou Apple no EAS e crie uma nova build de desenvolvimento ou
-produção. Consulte a [configuração de push do Expo](https://docs.expo.dev/push-notifications/push-notifications-setup/).
+Para avisos com o aplicativo fechado no Android:
+
+1. No Firebase, registre o pacote `br.com.everquest.app` e baixe o
+   `google-services.json`. Para uso local, coloque-o na raiz do projeto.
+   Para builds na nuvem, adicione esse arquivo ao projeto Everquest no EAS
+   como variável do tipo **File** chamada `GOOGLE_SERVICES_JSON` nos ambientes
+   dos builds usados (por exemplo, `preview` para o APK de teste).
+2. Em **Credentials → Android**, configure a chave **FCM V1** de uma conta de
+   serviço do mesmo projeto Firebase. Essa chave privada é diferente do
+   `google-services.json`: não inclua a chave privada no repositório, no app
+   ou nas variáveis do cliente.
+3. Gere um novo APK (`npx eas-cli@latest build --platform android --profile preview`).
+   Uma atualização JavaScript não adiciona a configuração nativa ao APK instalado.
+
+Consulte o [guia de FCM do Expo](https://docs.expo.dev/push-notifications/fcm-credentials/).
+No iOS, configure as [credenciais de push da Apple](https://docs.expo.dev/push-notifications/push-notifications-setup/)
+no EAS e gere um novo build.
 Cada convidado precisa abrir a nova versão e permitir notificações para
 registrar o aparelho. O navegador não recebe esses avisos remotos, e o Expo Go
 no Android não oferece push remoto. Sem um aparelho registrado, o convite

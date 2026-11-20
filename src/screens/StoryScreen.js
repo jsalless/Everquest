@@ -69,7 +69,7 @@ export default function StoryScreen({ userId, onChangeTab }) {
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.frame}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <View style={styles.hero}>

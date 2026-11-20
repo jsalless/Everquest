@@ -69,7 +69,7 @@ async function saveShopAvatar(prisma, profile, config) {
     if (!isAllowedEquipment(slot, id, ownedItemIds)) return null;
     avatar[slot] = id;
   }
-  const choices = { race: /^(human|goblin)$/, hair: /^(hair[1-6]|none)$/, eyes: /^(eye1|none)$/ };
+  const choices = { race: /^(human|goblin)$/, hair: /^(hair[1-6]|none)$/, eyes: /^(eye[1-3]|none)$/ };
   for (const field of ['skinColor', 'hairColor', 'shirtColor', 'pantsColor', 'shoesColor']) {
     choices[field] = /^#[\da-f]{6}$/i;
   }

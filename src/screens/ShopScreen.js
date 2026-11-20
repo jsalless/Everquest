@@ -121,7 +121,7 @@ export default function ShopScreen({ token, onChangeTab, onOpenWardrobe }) {
   };
 
   return (
-    <SafeAreaView style={styles.root} edges={['bottom']}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView style={styles.scroll}>
         <View style={[styles.hero, compact && styles.compactHero]}>
           <Image
